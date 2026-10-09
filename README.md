@@ -59,7 +59,7 @@ Fit notes report bounds, collisions, door swings and nearby gaps. They do not ce
 - `worker`: official Better Auth configuration/generated schema, email adapter and owner-scoped Hono API.
 - `migrations`: one additive SQL history for auth and application tables.
 
-The 30 generic furniture models and procedural textures are first-party geometry, labelled CC0 in the catalog. UI fonts are locally bundled under their package licenses. PDF exports embed Noto Sans; its SIL Open Font License is included at `public/fonts/OFL.txt`. The landing image is an actual exported room from the application.
+The 50 generic furniture and appliance models and procedural textures are first-party geometry, labelled CC0 in the catalog. The catalog includes TV consoles, televisions, kitchen and laundry appliances, and glass coffee, side and dining tables. Glass and metal finishes can be edited and are saved with the plan. UI fonts are locally bundled under their package licenses. PDF exports embed Noto Sans; its SIL Open Font License is included at `public/fonts/OFL.txt`. The landing image is an actual exported room from the application.
 
 ## Accounts and later deployment
 

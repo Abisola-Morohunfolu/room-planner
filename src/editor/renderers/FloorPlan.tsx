@@ -46,6 +46,7 @@ function FurnitureShape({
             radiusX={width / 2}
             radiusY={depth / 2}
             fill={item.colour}
+            fillOpacity={item.finishId === 'glass' ? 0.45 : 1}
             stroke={selected ? '#365d49' : '#716a5e'}
             strokeWidth={1 / scale}
           />
@@ -54,6 +55,7 @@ function FurnitureShape({
             width={width}
             height={depth}
             fill={item.colour}
+            fillOpacity={item.finishId === 'glass' ? 0.45 : 1}
             cornerRadius={isSofa ? 70 : isTable ? 25 : 8}
             stroke={selected ? '#365d49' : '#716a5e'}
             strokeWidth={1 / scale}

@@ -17,6 +17,7 @@ export function FurnitureThumbnail({ item }: { item: CatalogItem }) {
             rx={width / 2}
             ry={depth / 2}
             fill={item.colour}
+            fillOpacity={item.finish === 'glass' ? 0.45 : 1}
             stroke="#716a5e"
           />
         ) : (
@@ -25,6 +26,7 @@ export function FurnitureThumbnail({ item }: { item: CatalogItem }) {
             height={depth}
             rx={item.category === 'Seating' ? 5 : 1}
             fill={item.colour}
+            fillOpacity={item.finish === 'glass' ? 0.45 : 1}
             stroke="#716a5e"
           />
         )}
@@ -45,6 +47,37 @@ export function FurnitureThumbnail({ item }: { item: CatalogItem }) {
             fill="#f5f3ec"
           />
         )}
+        {item.finish === 'glass' && (
+          <path
+            d={`M${width * 0.24} ${depth * 0.7} L${width * 0.6} ${depth * 0.2} M${width * 0.4} ${depth * 0.8} L${width * 0.76} ${depth * 0.3}`}
+            stroke="#ffffff"
+            strokeWidth="2"
+          />
+        )}
+        {item.id.startsWith('tv-console') && (
+          <path d={`M${width / 3} 0 V${depth} M${(width * 2) / 3} 0 V${depth}`} stroke="#716a5e" />
+        )}
+        {item.category === 'Appliances' &&
+          (item.id === 'cooker' ? (
+            <g fill="#35464c">
+              {[0.27, 0.73].flatMap((x) =>
+                [0.27, 0.73].map((y) => (
+                  <circle
+                    key={`${x}-${y}`}
+                    cx={width * x}
+                    cy={depth * y}
+                    r={Math.min(width, depth) * 0.14}
+                  />
+                )),
+              )}
+            </g>
+          ) : (
+            <path
+              d={`M${width * 0.12} ${depth * 0.84} H${width * 0.88} M${width * 0.62} ${depth * 0.93} H${width * 0.8}`}
+              stroke="#35464c"
+              strokeWidth="2"
+            />
+          ))}
       </g>
     </svg>
   );
@@ -57,19 +90,19 @@ export function FurniturePanel() {
   const filtered = catalog.filter(
     (item) =>
       (category === 'All' || item.category === category) &&
-      item.name.toLowerCase().includes(search.toLowerCase()),
+      `${item.name} ${item.category}`.toLowerCase().includes(search.trim().toLowerCase()),
   );
   return (
     <>
       <div className="panel-heading">
         <h2>Find its place.</h2>
-        <p>Generic pieces. Your exact measurements.</p>
+        <p>Furniture and appliances. Your exact measurements.</p>
       </div>
       <label className="search-field">
         <Search size={16} />
         <input
           aria-label="Search furniture"
-          placeholder="Search furniture…"
+          placeholder="Search furniture & appliances…"
           value={search}
           onChange={(event) => setSearch(event.target.value)}
         />

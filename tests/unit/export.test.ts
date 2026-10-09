@@ -5,6 +5,19 @@ import { newProject, newItem, uid } from '../../src/domain/model';
 import { serializePlan, importPlan } from '../../src/export/planFile';
 import { exportCsv, csvCell } from '../../src/export/csv';
 import { exportPdf } from '../../src/export/pdf';
+it('round trips appliances and glass finishes with their edited measurements', () => {
+  const project = newProject();
+  project.layouts[0].items = [
+    { ...newItem('glass-dining-rect', 1000, 1000), widthMm: 1800, colour: '#b9d8df' },
+    { ...newItem('washing-machine', 2200, 1000), rotationDeg: 90 },
+    newItem('tv-console', 2000, 3500),
+  ];
+  const restored = importPlan(serializePlan(project));
+  for (const [index, original] of project.layouts[0].items.entries()) {
+    const { id: _id, ...properties } = original;
+    expect(restored.layouts[0].items[index]).toMatchObject(properties);
+  }
+});
 it('round trips all alternatives without identities or cloud metadata', () => {
   const project = newProject();
   project.layouts[0].items = [newItem('desk', 1000, 1000)];

@@ -133,6 +133,8 @@ export function ItemInspector() {
             <option value="neutral">Neutral</option>
             <option value="wood">Wood</option>
             <option value="fabric">Fabric</option>
+            <option value="glass">Glass</option>
+            <option value="metal">Metal</option>
           </select>
         </label>
       </div>

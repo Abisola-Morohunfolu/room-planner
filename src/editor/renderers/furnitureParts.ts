@@ -2,13 +2,16 @@ import { Color } from 'three';
 import type { FurnitureItem } from '../../domain/model';
 import { findCatalog } from '../../domain/catalog';
 import type { TextureKind } from './materials';
+import { buildApplianceParts } from './applianceParts';
 export interface FurniturePart {
   size: [number, number, number];
   position: [number, number, number];
   colour: string;
   round?: boolean;
+  disc?: boolean;
   radius?: number;
   texture?: TextureKind;
+  material?: 'glass' | 'metal' | 'screen';
 }
 export function buildFurnitureParts(item: FurnitureItem): FurniturePart[] {
   const width = item.widthMm / 1000,
@@ -33,6 +36,9 @@ export function buildFurnitureParts(item: FurnitureItem): FurniturePart[] {
         colour,
         texture,
         round: item.shape === 'ellipse',
+        ...(item.finishId === 'glass' || item.finishId === 'metal'
+          ? { material: item.finishId }
+          : {}),
       },
     ];
   const add = (
@@ -40,11 +46,22 @@ export function buildFurnitureParts(item: FurnitureItem): FurniturePart[] {
     position: FurniturePart['position'],
     paint = colour,
     options: Partial<FurniturePart> = {},
-  ) => parts.push({ size, position, colour: paint, texture, ...options });
+  ) =>
+    parts.push({
+      size,
+      position,
+      colour: paint,
+      texture,
+      ...(item.finishId === 'glass' || item.finishId === 'metal'
+        ? { material: item.finishId }
+        : {}),
+      ...options,
+    });
   const sofa = item.catalogId.startsWith('sofa') || item.catalogId === 'armchair',
     bed = item.catalogId.startsWith('bed-'),
     chair = item.catalogId.includes('chair'),
     table =
+      item.catalogId.startsWith('glass-') ||
       item.catalogId.includes('table') ||
       item.catalogId.startsWith('coffee-') ||
       (item.catalogId.startsWith('dining-') && !chair) ||
@@ -53,7 +70,41 @@ export function buildFurnitureParts(item: FurnitureItem): FurniturePart[] {
       item.catalogId === 'stool',
     shelf = ['bookcase', 'shelf-open', 'shelf-wide'].includes(item.catalogId),
     storage = ['wardrobe', 'dresser', 'low-cabinet', 'media-unit'].includes(item.catalogId);
-  if (sofa) {
+  if (findCatalog(item.catalogId)?.category === 'Appliances') {
+    parts.push(...buildApplianceParts(item));
+  } else if (item.catalogId.startsWith('tv-console')) {
+    const panel = Math.min(width, height, depth) * 0.08,
+      bodyHeight = height * 0.78,
+      bodyY = height * 0.11;
+    for (const side of [-1, 1]) {
+      add([panel, bodyHeight, depth], [(side * (width - panel)) / 2, bodyY, 0]);
+      add([width, panel, depth], [0, bodyY + (side * (bodyHeight - panel)) / 2, 0]);
+      add([panel, bodyHeight - panel * 2, depth * 0.94], [(side * width) / 6, bodyY, depth * 0.03]);
+      add(
+        [width * 0.29, bodyHeight - panel * 2, panel],
+        [(side * width) / 3, bodyY, (depth - panel) / 2],
+        lightColour,
+      );
+      add(
+        [width * 0.09, panel * 0.25, panel * 0.5],
+        [(side * width) / 3, bodyY + bodyHeight * 0.25, depth / 2 - panel * 0.25],
+        '#65716e',
+        { material: 'metal', texture: undefined },
+      );
+      for (const end of [-1, 1])
+        add(
+          [width * 0.035, height * 0.22, depth * 0.1],
+          [side * width * 0.43, -height * 0.39, end * depth * 0.36],
+          darkColour,
+        );
+    }
+    add(
+      [width - panel * 2, bodyHeight - panel * 2, panel],
+      [0, bodyY, -(depth - panel) / 2],
+      darkColour,
+    );
+    add([width / 3, panel, depth * 0.94], [0, bodyY, depth * 0.03]);
+  } else if (sofa) {
     add([width, height * 0.22, depth], [0, -height * 0.23, 0], darkColour, { radius: 0.04 });
     add([width * 0.92, height * 0.64, depth * 0.16], [0, height * 0.18, -depth * 0.42], colour, {
       radius: 0.055,
@@ -124,15 +175,23 @@ export function buildFurnitureParts(item: FurnitureItem): FurniturePart[] {
       { radius: 0.01, texture: 'fabric' },
     );
   } else if (table) {
-    const top = Math.min(0.075, height * 0.15);
+    const glass = item.finishId === 'glass',
+      frame = glass ? '#65716e' : darkColour,
+      frameOptions: Partial<FurniturePart> = glass ? { material: 'metal', texture: undefined } : {},
+      top = Math.min(glass ? 0.018 : 0.075, height * 0.15);
     add([width, top, depth], [0, (height - top) / 2, 0], colour, {
       round: item.shape === 'ellipse',
       radius: 0.014,
     });
     const legHeight = height - top;
     if (item.shape === 'ellipse') {
-      add([width * 0.13, legHeight, depth * 0.13], [0, -top / 2, 0], darkColour, { round: true });
-      add([width * 0.5, 0.025, depth * 0.5], [0, -height / 2 + 0.0125, 0], darkColour, {
+      add([width * 0.13, legHeight, depth * 0.13], [0, -top / 2, 0], frame, {
+        ...frameOptions,
+        round: true,
+      });
+      const base = Math.min(0.025, height * 0.1);
+      add([width * 0.5, base, depth * 0.5], [0, -height / 2 + base / 2, 0], frame, {
+        ...frameOptions,
         round: true,
       });
     } else
@@ -141,8 +200,8 @@ export function buildFurnitureParts(item: FurnitureItem): FurniturePart[] {
           add(
             [Math.min(0.055, width * 0.09), legHeight, Math.min(0.055, depth * 0.09)],
             [horizontalSide * width * 0.4, -top / 2, verticalSide * depth * 0.37],
-            darkColour,
-            { radius: 0.012 },
+            frame,
+            { ...frameOptions, radius: 0.012 },
           );
   } else if (chair) {
     add([width, height * 0.1, depth * 0.92], [0, -height * 0.015, 0], colour, {

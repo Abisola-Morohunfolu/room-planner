@@ -46,15 +46,23 @@ export function FurnitureMesh({
 function Part({ part }: { part: FurniturePart }) {
   const geometry = useMemo(
     () =>
-      part.round
-        ? new CylinderGeometry(part.size[0] / 2, part.size[0] / 2, part.size[1], 32)
-        : part.radius
-          ? new RoundedBoxGeometry(
-              ...part.size,
-              3,
-              Math.min(part.radius, ...part.size.map((dimension) => dimension / 3)),
+      part.disc
+        ? new CylinderGeometry(part.size[0] / 2, part.size[0] / 2, part.size[2], 32)
+            .rotateX(Math.PI / 2)
+            .scale(1, part.size[1] / part.size[0], 1)
+        : part.round
+          ? new CylinderGeometry(part.size[0] / 2, part.size[0] / 2, part.size[1], 32).scale(
+              1,
+              1,
+              part.size[2] / part.size[0],
             )
-          : new BoxGeometry(...part.size),
+          : part.radius
+            ? new RoundedBoxGeometry(
+                ...part.size,
+                3,
+                Math.min(part.radius, ...part.size.map((dimension) => dimension / 3)),
+              )
+            : new BoxGeometry(...part.size),
     [part],
   );
   const texture = useSurfaceTexture(part.texture);
@@ -65,11 +73,31 @@ function Part({ part }: { part: FurniturePart }) {
     [geometry],
   );
   return (
-    <mesh geometry={geometry} position={part.position} castShadow receiveShadow>
-      <meshStandardMaterial
+    <mesh
+      geometry={geometry}
+      position={part.position}
+      castShadow={part.material !== 'glass'}
+      receiveShadow
+    >
+      <meshPhysicalMaterial
         color={part.colour}
         map={texture}
-        roughness={part.texture === 'wood' ? 0.58 : 0.9}
+        roughness={
+          part.material === 'glass'
+            ? 0.08
+            : part.material === 'metal'
+              ? 0.3
+              : part.material === 'screen'
+                ? 0.18
+                : part.texture === 'wood'
+                  ? 0.58
+                  : 0.9
+        }
+        metalness={part.material === 'metal' ? 0.7 : 0}
+        transmission={part.material === 'glass' ? 0.85 : 0}
+        thickness={part.material === 'glass' ? Math.min(...part.size) : 0}
+        ior={1.5}
+        clearcoat={part.material === 'glass' || part.material === 'screen' ? 1 : 0}
       />
     </mesh>
   );

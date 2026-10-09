@@ -3,7 +3,7 @@ import { catalog } from '../../src/domain/catalog';
 import { newItem } from '../../src/domain/model';
 import { buildFurnitureParts } from '../../src/editor/renderers/furnitureParts';
 it('keeps all first-party furniture parts within their measured bounds', () => {
-  expect(catalog).toHaveLength(30);
+  expect(catalog).toHaveLength(50);
   for (const entry of catalog) {
     const item = newItem(entry.id, 0, 0),
       parts = buildFurnitureParts(item);
@@ -34,4 +34,45 @@ it('falls back to saved-size primitive geometry for unavailable catalog versions
       round: false,
     },
   ]);
+});
+it('keeps appliance, console and glass-table detail inside resized footprints', () => {
+  const additions = catalog.slice(30);
+  for (const entry of additions) {
+    for (const factor of [0.1, 1, 3]) {
+      const initial = newItem(entry.id, 0, 0);
+      const item = {
+        ...initial,
+        widthMm: initial.widthMm * factor,
+        depthMm: initial.depthMm * factor,
+        heightMm: initial.heightMm * factor,
+      };
+      const parts = buildFurnitureParts(item);
+      expect(parts.length, entry.id).toBeGreaterThan(2);
+      for (const part of parts) {
+        for (const [axis, dimension] of [item.widthMm, item.heightMm, item.depthMm].entries()) {
+          expect(part.size[axis], entry.id).toBeGreaterThan(0);
+          expect(
+            Math.abs(part.position[axis]) + part.size[axis] / 2,
+            `${entry.id} axis ${axis} scale ${factor}`,
+          ).toBeLessThanOrEqual(dimension / 2000 + 0.00001);
+        }
+      }
+    }
+  }
+});
+it('renders glass tops with opaque metal supports and honours finish edits', () => {
+  for (const entry of catalog.filter((entry) => entry.finish === 'glass')) {
+    const item = newItem(entry.id, 0, 0);
+    expect(buildFurnitureParts(item)[0].material).toBe('glass');
+    expect(
+      buildFurnitureParts(item)
+        .slice(1)
+        .every((part) => part.material === 'metal' && !part.texture),
+    ).toBe(true);
+    expect(
+      buildFurnitureParts({ ...item, finishId: 'wood' }).every(
+        (part) => !part.material && part.texture === 'wood',
+      ),
+    ).toBe(true);
+  }
 });

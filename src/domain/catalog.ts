@@ -1,5 +1,15 @@
 export type Category =
-  'Seating' | 'Tables' | 'Desks' | 'Beds' | 'Storage' | 'Rugs' | 'Lighting' | 'Fixtures' | 'Custom';
+  | 'Seating'
+  | 'Tables'
+  | 'Desks'
+  | 'Beds'
+  | 'Storage'
+  | 'Appliances'
+  | 'Rugs'
+  | 'Lighting'
+  | 'Fixtures'
+  | 'Custom';
+export type FurnitureFinish = 'neutral' | 'wood' | 'fabric' | 'glass' | 'metal';
 export interface CatalogItem {
   id: string;
   version: number;
@@ -11,6 +21,7 @@ export interface CatalogItem {
   shape: 'rectangle' | 'ellipse';
   colour: string;
   model: string;
+  finish: FurnitureFinish;
   nonblocking: boolean;
   license: string;
   source: string;
@@ -46,6 +57,26 @@ const entries: [string, string, Category, number, number, number, string?, strin
   ['rug-rect', 'Woven rug', 'Rugs', 2400, 1600, 10],
   ['rug-round', 'Round rug', 'Rugs', 1800, 1800, 10, 'ellipse'],
   ['floor-lamp', 'Floor lamp', 'Lighting', 350, 350, 1600, 'ellipse'],
+  ['tv-console', 'TV console', 'Storage', 1600, 400, 550],
+  ['tv-console-wide', 'Wide TV console', 'Storage', 2200, 450, 600],
+  ['television', 'Television with stand', 'Appliances', 1230, 300, 800],
+  ['soundbar', 'Soundbar', 'Appliances', 900, 100, 80],
+  ['refrigerator', 'Fridge freezer', 'Appliances', 600, 650, 1850],
+  ['fridge-double', 'Double-door refrigerator', 'Appliances', 900, 700, 1800],
+  ['chest-freezer', 'Chest freezer', 'Appliances', 1100, 650, 850],
+  ['washing-machine', 'Washing machine', 'Appliances', 600, 600, 850],
+  ['tumble-dryer', 'Tumble dryer', 'Appliances', 600, 600, 850],
+  ['dishwasher', 'Dishwasher', 'Appliances', 600, 600, 850],
+  ['cooker', 'Cooker with oven', 'Appliances', 600, 600, 900],
+  ['microwave', 'Microwave', 'Appliances', 500, 400, 300],
+  ['portable-ac', 'Portable air conditioner', 'Appliances', 450, 400, 750],
+  ['tower-fan', 'Tower fan', 'Appliances', 300, 300, 1000, 'ellipse'],
+  ['water-dispenser', 'Water dispenser', 'Appliances', 350, 350, 1200],
+  ['glass-coffee-rect', 'Glass coffee table', 'Tables', 1100, 600, 400],
+  ['glass-coffee-round', 'Round glass coffee table', 'Tables', 800, 800, 400, 'ellipse'],
+  ['glass-side-table', 'Glass side table', 'Tables', 450, 450, 500],
+  ['glass-dining-rect', 'Glass dining table', 'Tables', 1600, 900, 750],
+  ['glass-dining-round', 'Round glass dining table', 'Tables', 1100, 1100, 750, 'ellipse'],
 ];
 export const catalog: CatalogItem[] = entries.map(
   ([catalogId, name, category, width, depth, height, shape]) => ({
@@ -57,15 +88,27 @@ export const catalog: CatalogItem[] = entries.map(
     depth,
     height,
     shape: shape === 'ellipse' ? 'ellipse' : 'rectangle',
-    colour:
-      category === 'Seating'
-        ? '#819386'
-        : category === 'Rugs'
-          ? '#c7b89b'
-          : category === 'Beds'
-            ? '#dfd8c8'
-            : '#b18c65',
+    colour: catalogId.startsWith('glass-')
+      ? '#bad9d5'
+      : category === 'Appliances'
+        ? ['television', 'soundbar', 'tower-fan'].includes(catalogId)
+          ? '#303b40'
+          : '#d8dedd'
+        : category === 'Seating'
+          ? '#819386'
+          : category === 'Rugs'
+            ? '#c7b89b'
+            : category === 'Beds'
+              ? '#dfd8c8'
+              : '#b18c65',
     model: catalogId,
+    finish: catalogId.startsWith('glass-')
+      ? 'glass'
+      : category === 'Appliances'
+        ? 'metal'
+        : category === 'Seating'
+          ? 'fabric'
+          : 'wood',
     nonblocking: category === 'Rugs',
     license: 'CC0-1.0',
     source: 'First-party procedural geometry, Room Planner',
@@ -82,6 +125,7 @@ export const customCatalog: CatalogItem[] = ['box', 'cylinder'].map((kind) => ({
   shape: kind === 'box' ? 'rectangle' : 'ellipse',
   colour: '#9cafa4',
   model: kind,
+  finish: 'wood',
   nonblocking: false,
   license: 'CC0-1.0',
   source: 'First-party primitive',
