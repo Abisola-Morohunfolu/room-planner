@@ -2,6 +2,8 @@
 
 Version: 1.0 · 8 October 2026 · Status: design specification, not implemented
 
+Phase 1 scope update · 9 October 2026: the current frontend ships as a static browser-only app using the existing `guest` IndexedDB partition. Authentication/session requests, cloud sync and account controls are disconnected from the app entry point; `/sign-in` redirects to `/projects`. Vite needs no API proxy. The Worker, D1, auth and sync contracts below are retained for Phase 2. Device persistence, local conflict recovery, Trash and exports/import remain in scope; offline asset caching is not implemented.
+
 ## 1. Architecture decisions
 
 Build a client-rendered React/TypeScript application with Vite. Geometry and rendering remain in the browser. A same-origin Cloudflare Worker provides authentication and project APIs. Cloudflare D1 stores accounts, sessions, and project snapshots.

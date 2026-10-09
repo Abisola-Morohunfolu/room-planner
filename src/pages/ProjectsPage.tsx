@@ -1,5 +1,5 @@
 import { useEffect, useState, useRef, useCallback } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { Plus, Upload, Trash2, Copy, ArrowUpRight, Undo2 } from 'lucide-react';
 import { Brand } from '../components/Brand';
 import { CreateProjectDialog } from '../components/CreateProjectDialog';
@@ -13,13 +13,11 @@ import {
   type StoredProject,
 } from '../persistence/database';
 import { useSync } from '../sync/SyncContext';
-import { GuestUploadDialog } from '../sync/GuestUploadDialog';
 import { useAccount } from '../auth/AccountContext';
 import { activeLayout } from '../state/editor';
 import { importPlan, downloadPlan } from '../export/planFile';
 export default function ProjectsPage() {
-  const { partition, email } = useAccount(),
-    [uploading, setUploading] = useState(false),
+  const { partition } = useAccount(),
     engine = useSync(),
     [records, setRecords] = useState<StoredProject[]>([]),
     [trash, setTrash] = useState(false),
@@ -71,7 +69,6 @@ export default function ProjectsPage() {
       <header className="site-header">
         <Brand />
         <nav>
-          <Link to="/sign-in">{email ? 'Account' : 'Back up online'}</Link>
           <button className="small-primary" onClick={() => setCreating(true)}>
             <Plus size={17} />
             New room
@@ -85,9 +82,7 @@ export default function ProjectsPage() {
             <p>
               {trash
                 ? 'Restore a room within 30 days.'
-                : email
-                  ? 'Your account’s plans on this device.'
-                  : 'Saved in this browser, on this device.'}
+                : 'Saved in this browser. Download a plan file to back up a room or move it to another device.'}
             </p>
           </div>
           <button onClick={() => file.current?.click()}>
@@ -106,7 +101,6 @@ export default function ProjectsPage() {
             }}
           />
         </div>
-        {email && <button onClick={() => setUploading(true)}>Back up selected device rooms</button>}
         <div className="project-tabs">
           <button aria-pressed={!trash} onClick={() => setTrash(false)}>
             Your rooms
@@ -189,9 +183,6 @@ export default function ProjectsPage() {
           </div>
         )}
       </main>
-      {uploading && (
-        <GuestUploadDialog onClose={() => setUploading(false)} onUploaded={() => void refresh()} />
-      )}
       {creating && <CreateProjectDialog onClose={() => setCreating(false)} />}
     </div>
   );

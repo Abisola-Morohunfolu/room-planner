@@ -1,10 +1,10 @@
 import { test, expect } from '@playwright/test';
 import AxeBuilder from '@axe-core/playwright';
-test('landing, editor, export dialog, project list and sign-in pass automated WCAG checks', async ({
+test('landing, editor, export dialog and project list pass automated WCAG checks', async ({
   page,
 }) => {
   const violations: unknown[] = [];
-  for (const surface of ['landing', 'editor', 'export', 'projects', 'sign-in']) {
+  for (const surface of ['landing', 'editor', 'export', 'projects']) {
     if (surface === 'landing') await page.goto('/');
     if (surface === 'editor') {
       await page.getByRole('button', { name: 'Explore a furnished example' }).click();
@@ -16,10 +16,6 @@ test('landing, editor, export dialog, project list and sign-in pass automated WC
       await page.getByRole('button', { name: 'Close dialog' }).click();
       await page.getByRole('link', { name: 'Back to your rooms' }).click();
       await expect(page.getByRole('heading', { name: 'Rooms with possibility.' })).toBeVisible();
-    }
-    if (surface === 'sign-in') {
-      await page.getByRole('link', { name: 'Back up online' }).click();
-      await expect(page.getByLabel('Email address')).toBeVisible();
     }
     const result = await new AxeBuilder({ page })
       .withTags(['wcag2a', 'wcag2aa', 'wcag21aa', 'wcag22aa'])

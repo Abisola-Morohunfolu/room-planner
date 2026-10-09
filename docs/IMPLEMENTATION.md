@@ -2,6 +2,14 @@
 
 The 9 October 2026 build request authorizes implementation, superseding the original documentation-only status. PRD.md governs intended behavior. The user requested local verification before configuring deployment.
 
+## Phase 1 scope
+
+The current release is browser-only. The entry point uses the existing device storage partition without mounting authentication or cloud sync. Sign-in redirects to Your rooms, and account/online-backup controls are removed. Vite runs without an API proxy; no Worker, D1 database, auth secret, or email sender is required. Plan files provide manual backup and transfer between devices. The existing cloud implementation is retained for Phase 2, outside the frontend bundle; account caches remain separate and preserved. Offline asset caching is not part of this change.
+
+`pnpm check` verifies the frontend and unit tests. `pnpm check:cloud` additionally verifies the deferred Workers/D1 implementation. Playwright starts only Vite by default and includes a browser-only regression with API requests blocked. Earlier implementation and test evidence below describes the original full build.
+
+Phase 1 verification: formatting, lint, type checking, **38 unit tests**, and the production build passed for the isolated Phase 1 commit, excluding separate furniture/stacking work. Against the static production preview, **8 desktop/mobile browser checks** passed for zero API requests, local save/reload, plan-file backup/import, Trash restore, sign-in redirect, automated accessibility, 3D rendering/fallback, and all export formats. Desktop/mobile project and editor screenshots were visually inspected. The generated frontend contains no Better Auth client or auth/project API endpoint references.
+
 ## Implemented
 
 - Shared, validated millimetre document model; bounded geometry, units, wall openings and door sectors.
