@@ -1,0 +1,4 @@
+# Copy to .dev.vars; generate a random value of at least 32 characters.
+BETTER_AUTH_SECRET=
+# Required only when EMAIL_PROVIDER is set to resend.
+RESEND_API_KEY=

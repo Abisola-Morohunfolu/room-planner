@@ -1,0 +1,11 @@
+node_modules
+dist
+.wrangler
+pnpm-lock.yaml
+worker-configuration.d.ts
+worker/auth-schema.ts
+migrations
+test-results
+playwright-report
+
+.impeccable/hook.cache.json

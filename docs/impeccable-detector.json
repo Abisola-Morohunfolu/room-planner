@@ -1,0 +1,13 @@
+[
+  {
+    "antipattern": "layout-transition",
+    "name": "Layout property animation",
+    "description": "Animating width, height, padding, or margin causes layout thrash and janky performance. Use transform and opacity instead, or grid-template-rows for height animations.",
+    "severity": "warning",
+    "category": "quality",
+    "file": "/Users/mac/Documents/projects/room-planner/src/styles.css",
+    "line": 1438,
+    "snippet": "transition: height",
+    "importedBy": ["main.tsx"]
+  }
+]
