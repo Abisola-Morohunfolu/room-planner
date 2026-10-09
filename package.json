@@ -64,6 +64,7 @@
     "dev": "vite",
     "dev:api": "wrangler dev --ip 127.0.0.1 --port 8787",
     "build": "vite build",
+    "preview": "vite preview --host 127.0.0.1",
     "typecheck": "tsc --noEmit",
     "test:unit": "vitest run --config vitest.config.ts",
     "test:worker": "vitest run --config vitest.worker.config.ts",
@@ -71,7 +72,8 @@
     "db:generate": "drizzle-kit generate",
     "db:migrate": "wrangler d1 migrations apply room-planner-local --local",
     "types": "wrangler types --strict-vars false",
-    "check": "pnpm format:check && pnpm lint && pnpm typecheck && pnpm test:unit && pnpm test:worker && pnpm build",
+    "check": "pnpm format:check && pnpm lint && pnpm typecheck && pnpm test:unit && pnpm build",
+    "check:cloud": "pnpm check && pnpm test:worker",
     "lint": "eslint .",
     "format": "prettier --write .",
     "format:check": "prettier --check ."

@@ -1,6 +1,15 @@
-import { env, applyD1Migrations, SELF } from 'cloudflare:test';
+import {
+  env,
+  applyD1Migrations,
+  SELF,
+  createExecutionContext,
+  waitOnExecutionContext,
+} from 'cloudflare:test';
 import { beforeAll, it, expect } from 'vitest';
+import { createAuthClient } from 'better-auth/react';
+import { emailOTPClient } from 'better-auth/client/plugins';
 import { createAuth } from '../../worker/auth';
+import worker from '../../worker';
 import { newProject, uid } from '../../src/domain/model';
 import type { D1Migration } from '@cloudflare/vitest-plugin';
 declare global {
@@ -86,6 +95,159 @@ it('enforces code expiry and attempts with the pinned plugin', async () => {
     (await auth.api.signInEmailOTP({ body: { email: attemptEmail, otp: code }, asResponse: true }))
       .status,
   ).not.toBe(200);
+});
+it('forwards refreshed and expired session cookies from protected API requests', async () => {
+  const { cookie } = await signIn('refresh@example.test');
+  const previousExpiry = Date.now() + 5 * 86400000;
+  await env.DB.prepare(
+    'UPDATE session SET expires_at = ? WHERE user_id = (SELECT id FROM user WHERE email = ?)',
+  )
+    .bind(previousExpiry, 'refresh@example.test')
+    .run();
+  const refreshed = await request('/api/projects', cookie);
+  expect(refreshed.status).toBe(200);
+  expect(refreshed.headers.get('set-cookie')).toContain('better-auth.session_token=');
+  expect(refreshed.headers.get('set-cookie')).toContain('Max-Age=604800');
+  const session = await env.DB.prepare(
+    'SELECT expires_at FROM session WHERE user_id = (SELECT id FROM user WHERE email = ?)',
+  )
+    .bind('refresh@example.test')
+    .first<{ expires_at: number }>();
+  expect(session!.expires_at).toBeGreaterThan(previousExpiry);
+  await env.DB.prepare(
+    'UPDATE session SET expires_at = 0 WHERE user_id = (SELECT id FROM user WHERE email = ?)',
+  )
+    .bind('refresh@example.test')
+    .run();
+  const expired = await request('/api/projects', cookie);
+  expect(expired.status).toBe(401);
+  expect(expired.headers.get('set-cookie')).toContain('Max-Age=0');
+});
+it('rejects an incomplete sender configuration before storing a sign-in code', async () => {
+  const context = createExecutionContext();
+  const response = await worker.fetch(
+    new Request(origin + '/api/auth/email-otp/send-verification-otp', {
+      method: 'POST',
+      headers: { origin, 'content-type': 'application/json' },
+      body: JSON.stringify({ email: 'unconfigured@example.test', type: 'sign-in' }),
+    }),
+    { ...env, EMAIL_PROVIDER: 'resend', EMAIL_FROM: 'sender@example.test', RESEND_API_KEY: '' },
+    context,
+  );
+  await waitOnExecutionContext(context);
+  expect(response.status).toBe(503);
+  expect(await response.json()).toMatchObject({ error: { code: 'email_unavailable' } });
+  expect(
+    await env.DB.prepare('SELECT id FROM verification WHERE identifier = ?')
+      .bind('sign-in-otp-unconfigured@example.test')
+      .first(),
+  ).toBeNull();
+});
+it('integrates the React OTP client with HTTP auth, sessions and sign-out', async () => {
+  let code = '',
+    cookie = '';
+  const email = 'client@example.test';
+  const auth = createAuth(env, async (_email, otp) => {
+    code = otp;
+  });
+  const client = createAuthClient({
+    baseURL: origin,
+    plugins: [emailOTPClient()],
+    fetchOptions: {
+      customFetchImpl: async (input, init) => {
+        const headers = new Headers(init?.headers);
+        headers.set('origin', origin);
+        headers.set('cf-connecting-ip', '192.0.2.1');
+        if (cookie) headers.set('cookie', cookie);
+        const response = await auth.handler(new Request(input, { ...init, headers }));
+        const sessionCookie = response.headers
+          .getSetCookie()
+          .find((value) => value.startsWith('better-auth.session_token='));
+        if (sessionCookie) cookie = sessionCookie.split(';')[0];
+        for (const value of response.headers.getSetCookie()) {
+          if (value.startsWith('better-auth.session_data=')) expect(value).toContain('Max-Age=0');
+        }
+        return response;
+      },
+    },
+  });
+  expect((await client.emailOtp.sendVerificationOtp({ email, type: 'sign-in' })).error).toBeNull();
+  expect(code).toMatch(/^\d{6}$/);
+  const signedIn = await client.signIn.emailOtp({ email, otp: code });
+  expect(signedIn.error).toBeNull();
+  expect(signedIn.data?.user.emailVerified).toBe(true);
+  expect((await client.getSession()).data?.user.email).toBe(email);
+  expect((await request('/api/auth/get-session', cookie)).headers.get('cache-control')).toBe(
+    'no-store',
+  );
+  expect((await request('/api/projects', cookie)).status).toBe(200);
+  const signedInCookie = cookie;
+  expect((await client.signOut()).error).toBeNull();
+  expect((await client.getSession()).data).toBeNull();
+  expect((await request('/api/projects', signedInCookie)).status).toBe(401);
+});
+it('enforces persisted OTP send limits across concurrent HTTP requests and auth instances', async () => {
+  let delivered = 0;
+  const responses = await Promise.all(
+    Array.from({ length: 4 }, (_, index) =>
+      createAuth(env, async () => {
+        delivered++;
+      }).handler(
+        new Request(origin + '/api/auth/email-otp/send-verification-otp', {
+          method: 'POST',
+          headers: { origin, 'cf-connecting-ip': '192.0.2.2', 'content-type': 'application/json' },
+          body: JSON.stringify({ email: `limit-${index}@example.test`, type: 'sign-in' }),
+        }),
+      ),
+    ),
+  );
+  expect(responses.map((response) => response.status).sort()).toEqual([200, 200, 200, 429]);
+  expect(delivered).toBe(3);
+  expect(
+    Number(responses.find((response) => response.status === 429)!.headers.get('x-retry-after')),
+  ).toBeGreaterThan(0);
+  expect(await env.DB.prepare('SELECT count FROM rate_limit WHERE count = 3').first()).toBeTruthy();
+});
+it('rejects foreign origins and sets protected cookies on HTTPS', async () => {
+  const httpsOrigin = 'https://room-planner.example.test';
+  let code = '';
+  const auth = createAuth({ ...env, APP_ORIGIN: httpsOrigin }, async (_email, otp) => {
+    code = otp;
+  });
+  const email = 'https@example.test';
+  const send = (requestOrigin: string) =>
+    auth.handler(
+      new Request(httpsOrigin + '/api/auth/email-otp/send-verification-otp', {
+        method: 'POST',
+        headers: {
+          origin: requestOrigin,
+          'cf-connecting-ip': '192.0.2.3',
+          'content-type': 'application/json',
+        },
+        body: JSON.stringify({ email, type: 'sign-in' }),
+      }),
+    );
+  expect((await send('https://wrong.test')).status).toBe(403);
+  expect(code).toBe('');
+  expect((await send(httpsOrigin)).status).toBe(200);
+  const result = await auth.handler(
+    new Request(httpsOrigin + '/api/auth/sign-in/email-otp', {
+      method: 'POST',
+      headers: {
+        origin: httpsOrigin,
+        'cf-connecting-ip': '192.0.2.3',
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({ email, otp: code }),
+    }),
+  );
+  expect(result.status).toBe(200);
+  const cookie = result.headers.get('set-cookie');
+  expect(cookie).toContain('__Secure-better-auth.session_token=');
+  expect(cookie).toContain('HttpOnly');
+  expect(cookie).toContain('Secure');
+  expect(cookie).toContain('SameSite=Lax');
+  expect(cookie).toContain('Max-Age=604800');
 });
 it('enforces ownership, idempotent writes, concurrent CAS, Trash and origin checks', async () => {
   const a = await signIn('owner-a@example.test'),

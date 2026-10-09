@@ -94,10 +94,10 @@ app.get('/api/config', (context) =>
     emailConfigured: emailConfigured(context.env),
   }),
 );
-app.on(['GET', 'POST'], '/api/auth/*', async (context) => {
+app.all('/api/auth/*', async (context) => {
   if (
     context.req.path === '/api/auth/email-otp/send-verification-otp' &&
-    context.env.EMAIL_PROVIDER === 'disabled'
+    !emailConfigured(context.env)
   )
     throw new ApiError(
       503,
@@ -112,9 +112,13 @@ app.use('/api/projects*', async (context, next) => {
     if (origin !== context.env.APP_ORIGIN)
       throw new ApiError(403, 'invalid_origin', 'Request origin is not permitted.');
   }
-  const session = await createAuth(context.env).api.getSession({
+  const { response: session, headers } = await createAuth(context.env).api.getSession({
     headers: context.req.raw.headers,
+    returnHeaders: true,
   });
+  for (const cookie of headers.getSetCookie()) {
+    context.header('Set-Cookie', cookie, { append: true });
+  }
   if (!session) throw new ApiError(401, 'unauthenticated', 'Sign in to open online plans.');
   context.set('ownerId', session.user.id);
   await next();

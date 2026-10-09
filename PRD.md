@@ -2,6 +2,8 @@
 
 Version: 1.0 · 8 October 2026 · Status: ready for implementation planning
 
+Phase 1 scope update · 9 October 2026: ship browser-only planning, device saves, local Trash and exports/import. Accounts, email sign-in and cloud backup/synchronization (RP-13) are deferred to Phase 2. The requirements below retain the full product vision; Phase 1 uses plan files for manual backup and transfer between devices.
+
 ## 1. Product intent
 
 **See how it fits before you move or buy it.**

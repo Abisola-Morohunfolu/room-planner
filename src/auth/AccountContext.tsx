@@ -1,20 +1,8 @@
-import { createContext, useContext, type ReactNode } from 'react';
-import { authClient } from './client';
-const AccountContext = createContext<{ partition: string; email: string | null; pending: boolean }>(
-  { partition: 'guest', email: null, pending: true },
-);
-export function AccountProvider({ children }: { children: ReactNode }) {
-  const { data, isPending } = authClient.useSession();
-  return (
-    <AccountContext.Provider
-      value={{
-        partition: data?.user.id ?? 'guest',
-        email: data?.user.email ?? null,
-        pending: isPending,
-      }}
-    >
-      {children}
-    </AccountContext.Provider>
-  );
-}
+import { createContext, useContext } from 'react';
+// Phase 1 uses the existing device partition without starting an auth session request.
+export const AccountContext = createContext<{
+  partition: string;
+  email: string | null;
+  pending: boolean;
+}>({ partition: 'guest', email: null, pending: false });
 export const useAccount = () => useContext(AccountContext);

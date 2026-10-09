@@ -231,9 +231,6 @@ export default function EditorPage() {
           </button>
         </div>
         <div className="header-actions">
-          <Link className="backup-link" to={`/sign-in?returnTo=/plan/${projectId}`}>
-            Back up online
-          </Link>
           <button
             className="primary export-button"
             aria-label="Export plan"
