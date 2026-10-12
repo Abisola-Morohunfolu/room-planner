@@ -82,7 +82,36 @@ The sharing suite covers separate creator/recipient contexts, immutable alternat
 
 Deploy sharing as a same-origin Worker + Static Assets application. `/api/*` and `/share/*` run the Worker first; shared page responses set `no-store`, `noindex, nofollow` and `no-referrer`, and API responses use `no-store`. The viewer also applies robots/referrer metadata on SPA navigation. The Worker validates `Origin` on mutations, uses cryptographic public IDs and management tokens, stores only SHA-256 token hashes, and compares fixed-size digests in constant time. There is no public list or snapshot update endpoint. Anonymous creation uses the [Workers rate-limiting binding](https://developers.cloudflare.com/workers/runtime-apis/bindings/rate-limit/) configured for 10 requests/minute/IP (per Cloudflare location; it is not an exact global quota). A 429 response includes `Retry-After: 60`. Expired snapshots are unavailable immediately; the daily scheduled handler deletes at most 100 expired rows per run through the indexed expiry column. Monitor the backlog and increase cleanup frequency/batch budget if volume requires it.
 
-No external deployment was performed. The checked-in D1 ID remains a local placeholder. Before production, create separate real staging/production D1 bindings, review/apply the additive migration, set the matching HTTPS `APP_ORIGIN`, retain `ENABLE_CLOUD=false`, choose a rate-limit namespace unique within the account, and build Static Assets. Staging must pass create/view/copy/revoke smoke tests and verify shared-page headers. Existing structured error logs and traces are enabled; sharing logs emit creation/revocation/cleanup events without documents, URLs or management tokens. Monitor 429/503 responses, creation/API failures and cleanup/backlog before promoting. Hosted sharing on a static-only host is unavailable until a same-origin backend is configured.
+Cloudflare hosting is configured in `wrangler.jsonc` with separate `staging` and `production` environments. The default configuration retains the local D1 placeholder for local development. Hosted environments use real, separate D1 databases, matching HTTPS `APP_ORIGIN` values, independent rate-limit namespaces, `ENABLE_CLOUD=false`, Static Assets, structured logs, traces and daily expiry cleanup. Sharing logs emit creation/revocation/cleanup events without documents, URLs or management tokens. Monitor 429/503 responses, creation/API failures and cleanup/backlog. Hosted sharing on a static-only host requires a same-origin backend.
+
+## Cloudflare terminal workflow
+
+The configured account is `da911c2f880d7ef621e9c03fe91c3bea`. Staging uses Worker/database `room-planner-staging`; production uses Worker `room-planner` and database `room-planner-production`. Deployment serves the frontend and API together so sharing stays on the same origin.
+
+- Staging: [Room Planner staging](https://room-planner-staging.amorohunfolu.workers.dev)
+- Production: [Room Planner](https://room-planner.amorohunfolu.workers.dev)
+
+Use the project's pinned Wrangler through pnpm:
+
+```sh
+pnpm exec wrangler whoami
+# If login is needed:
+pnpm exec wrangler login
+
+pnpm check:cloud
+pnpm db:migrate:staging
+pnpm deploy:staging
+pnpm smoke:cloud https://room-planner-staging.amorohunfolu.workers.dev
+
+# After staging passes:
+pnpm db:migrate:production
+pnpm deploy:production
+pnpm smoke:cloud https://room-planner.amorohunfolu.workers.dev
+```
+
+The remote migration commands target only their named environment and apply pending migrations. Deployment scripts build the frontend first. Always specify a hosted environment for remote Wrangler commands; the default config is for local development. `smoke:cloud` requires Playwright Chromium (`pnpm exec playwright install chromium`) and checks health, the disabled account API, foreign-origin rejection, snapshot creation/viewing, shared-page headers, an independent device copy and reload, and revocation. It creates one temporary snapshot and revokes it; browser contexts and device copies are discarded when it exits. It never prints the management token.
+
+Hosted Phase 1 environments intentionally omit the email binding and disable email delivery. Wrangler currently warns that the default configuration's email binding is not repeated in these environments; this omission is intentional. Login and cloud backup require the Phase 2 work below.
 
 ## Phase 2: accounts and cloud backup
 
@@ -92,7 +121,7 @@ To work on the deferred API, copy `.dev.vars.example` to `.dev.vars`, set a rand
 
 Runtime auth tests use an injected sender for controlled test addresses without sending messages. Account caches are partitioned by user; device rooms are copied only after explicit selection. The retained sign-out flow checks pending changes and offers plan-file downloads, explicit discard, or cancellation.
 
-For Phase 2 deployment, create separate staging/production D1 databases, replace the placeholder local database ID and set a matching HTTPS `APP_ORIGIN`. Set a fresh secret via Wrangler, apply reviewed migrations, build Static Assets, and configure a verified sender. Use `EMAIL_PROVIDER=cloudflare` with the `EMAIL` binding, or `resend` with `RESEND_API_KEY`. The Cloudflare binding follows the [official Workers Email Sending API](https://developers.cloudflare.com/email-service/api/send-emails/workers-api/). No remote account or service has been configured by this build.
+For Phase 2 deployment, use the existing separate staging/production D1 bindings and matching HTTPS `APP_ORIGIN` values. Set a fresh secret via Wrangler for each environment, apply reviewed migrations, build Static Assets, and configure a verified sender. Use `EMAIL_PROVIDER=cloudflare` with an `EMAIL` binding added to each hosted environment, or `resend` with `RESEND_API_KEY`. The Cloudflare binding follows the [official Workers Email Sending API](https://developers.cloudflare.com/email-service/api/send-emails/workers-api/). Hosted Phase 1 sharing does not enable accounts or email delivery.
 
 A daily Worker schedule removes server Trash older than 30 days in Phase 2; Phase 1 cleans device Trash locally. Before enabling accounts, verify domain delivery, HTTPS cookies, monitoring and D1 restore/rollback procedures. Physical mobile performance verification applies to both phases.
 

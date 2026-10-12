@@ -1,6 +1,7 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "room-planner-local",
+  "account_id": "da911c2f880d7ef621e9c03fe91c3bea",
   "main": "worker/index.ts",
   "compatibility_date": "2026-10-09",
   "compatibility_flags": ["nodejs_compat"],
@@ -30,4 +31,60 @@
   },
   "observability": { "enabled": true, "traces": { "enabled": true, "head_sampling_rate": 0.1 } },
   "triggers": { "crons": ["0 3 * * *"] },
+  "env": {
+    "staging": {
+      "name": "room-planner-staging",
+      "workers_dev": true,
+      "preview_urls": false,
+      "d1_databases": [
+        {
+          "binding": "DB",
+          "database_name": "room-planner-staging",
+          "database_id": "7ac86c32-f5fe-43de-8383-c44b28b76896",
+          "migrations_dir": "migrations",
+        },
+      ],
+      "ratelimits": [
+        {
+          "name": "SHARE_LIMITER",
+          "namespace_id": "2026101201",
+          "simple": { "limit": 10, "period": 60 },
+        },
+      ],
+      "send_email": [],
+      "vars": {
+        "ENABLE_CLOUD": "false",
+        "APP_ORIGIN": "https://room-planner-staging.amorohunfolu.workers.dev",
+        "EMAIL_FROM": "",
+        "EMAIL_PROVIDER": "disabled",
+      },
+    },
+    "production": {
+      "name": "room-planner",
+      "workers_dev": true,
+      "preview_urls": false,
+      "d1_databases": [
+        {
+          "binding": "DB",
+          "database_name": "room-planner-production",
+          "database_id": "fde7a02e-fc2d-43ec-9f15-47d476301f8e",
+          "migrations_dir": "migrations",
+        },
+      ],
+      "ratelimits": [
+        {
+          "name": "SHARE_LIMITER",
+          "namespace_id": "2026101202",
+          "simple": { "limit": 10, "period": 60 },
+        },
+      ],
+      "send_email": [],
+      "vars": {
+        "ENABLE_CLOUD": "false",
+        "APP_ORIGIN": "https://room-planner.amorohunfolu.workers.dev",
+        "EMAIL_FROM": "",
+        "EMAIL_PROVIDER": "disabled",
+      },
+    },
+  },
 }

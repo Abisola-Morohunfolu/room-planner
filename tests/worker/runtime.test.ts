@@ -123,26 +123,35 @@ it('forwards refreshed and expired session cookies from protected API requests',
   expect(expired.status).toBe(401);
   expect(expired.headers.get('set-cookie')).toContain('Max-Age=0');
 });
-it('rejects an incomplete sender configuration before storing a sign-in code', async () => {
-  const context = createExecutionContext();
-  const response = await worker.fetch(
-    new Request(origin + '/api/auth/email-otp/send-verification-otp', {
-      method: 'POST',
-      headers: { origin, 'content-type': 'application/json' },
-      body: JSON.stringify({ email: 'unconfigured@example.test', type: 'sign-in' }),
-    }),
-    { ...env, EMAIL_PROVIDER: 'resend', EMAIL_FROM: 'sender@example.test', RESEND_API_KEY: '' },
-    context,
-  );
-  await waitOnExecutionContext(context);
-  expect(response.status).toBe(503);
-  expect(await response.json()).toMatchObject({ error: { code: 'email_unavailable' } });
-  expect(
-    await env.DB.prepare('SELECT id FROM verification WHERE identifier = ?')
-      .bind('sign-in-otp-unconfigured@example.test')
-      .first(),
-  ).toBeNull();
-});
+it.each(['resend', 'cloudflare'])(
+  'rejects an incomplete %s sender configuration before storing a sign-in code',
+  async (provider) => {
+    const context = createExecutionContext();
+    const response = await worker.fetch(
+      new Request(origin + '/api/auth/email-otp/send-verification-otp', {
+        method: 'POST',
+        headers: { origin, 'content-type': 'application/json' },
+        body: JSON.stringify({ email: 'unconfigured@example.test', type: 'sign-in' }),
+      }),
+      {
+        ...env,
+        EMAIL_PROVIDER: provider,
+        EMAIL_FROM: 'sender@example.test',
+        RESEND_API_KEY: '',
+        EMAIL: undefined,
+      },
+      context,
+    );
+    await waitOnExecutionContext(context);
+    expect(response.status).toBe(503);
+    expect(await response.json()).toMatchObject({ error: { code: 'email_unavailable' } });
+    expect(
+      await env.DB.prepare('SELECT id FROM verification WHERE identifier = ?')
+        .bind('sign-in-otp-unconfigured@example.test')
+        .first(),
+    ).toBeNull();
+  },
+);
 it('integrates the React OTP client with HTTP auth, sessions and sign-out', async () => {
   let code = '',
     cookie = '';

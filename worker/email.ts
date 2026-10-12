@@ -1,7 +1,7 @@
 export function emailConfigured(env: Env) {
   return (
     !!env.EMAIL_FROM &&
-    (env.EMAIL_PROVIDER === 'cloudflare' ||
+    ((env.EMAIL_PROVIDER === 'cloudflare' && !!env.EMAIL) ||
       (env.EMAIL_PROVIDER === 'resend' && !!env.RESEND_API_KEY))
   );
 }
@@ -10,6 +10,7 @@ export async function sendSignInCode(env: Env, email: string, code: string) {
   const subject = 'Your Room Planner sign-in code';
   const text = `Your Room Planner code is ${code}. It expires in 5 minutes. If you did not request it, ignore this email.`;
   if (env.EMAIL_PROVIDER === 'cloudflare') {
+    if (!env.EMAIL) throw new Error('Sign-in email is not configured.');
     try {
       await env.EMAIL.send({
         from: env.EMAIL_FROM,
