@@ -3,7 +3,7 @@ import { catalog } from '../../src/domain/catalog';
 import { newItem } from '../../src/domain/model';
 import { buildFurnitureParts } from '../../src/editor/renderers/furnitureParts';
 it('keeps all first-party furniture parts within their measured bounds', () => {
-  expect(catalog).toHaveLength(50);
+  expect(catalog).toHaveLength(52);
   for (const entry of catalog) {
     const item = newItem(entry.id, 0, 0),
       parts = buildFurnitureParts(item);

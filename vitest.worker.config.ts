@@ -6,6 +6,7 @@ export default defineConfig({
       wrangler: { configPath: './wrangler.jsonc' },
       miniflare: {
         bindings: {
+          ENABLE_CLOUD: 'true',
           TEST_MIGRATIONS: await readD1Migrations('./migrations'),
           BETTER_AUTH_SECRET: 'test-only-authentication-secret-at-least-32-characters',
           RESEND_API_KEY: '',

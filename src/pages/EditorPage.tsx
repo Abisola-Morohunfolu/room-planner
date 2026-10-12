@@ -5,6 +5,7 @@ import {
   Undo2,
   Redo2,
   Download,
+  Share2,
   Square,
   Armchair,
   Palette,
@@ -31,6 +32,7 @@ import { ItemInspector } from '../editor/panels/ItemInspector';
 import { OpeningInspector } from '../editor/panels/OpeningInspector';
 import { SurfaceInspector } from '../editor/panels/SurfaceInspector';
 import { ExportDialog } from '../editor/ExportDialog';
+import { ShareDialog } from '../sharing/ShareDialog';
 import { CompareDialog } from '../editor/CompareDialog';
 import { warnings, roomArea } from '../domain/geometry';
 import { findCatalog } from '../domain/catalog';
@@ -52,6 +54,7 @@ export default function EditorPage() {
     [loaded, setLoaded] = useState(false),
     [loadError, setLoadError] = useState<string | null>(null),
     [recoveryId, setRecoveryId] = useState<string | null>(null),
+    [sharing, setSharing] = useState(false),
     [exporting, setExporting] = useState(false),
     [comparing, setComparing] = useState(false),
     [sheetOpen, setSheetOpen] = useState(false),
@@ -80,12 +83,15 @@ export default function EditorPage() {
         if (record.partition !== 'guest') engine?.schedule(record.key);
         setLoaded(true);
       })
-      .catch(() => setLoadError('Device storage is unavailable.'));
+      .catch(() => {
+        if (!cancelled) setLoadError('Device storage is unavailable.');
+      });
     return () => {
       cancelled = true;
       const current = saver.current;
       if (current) {
-        void current.flush().finally(() => current.dispose());
+        void current.flush();
+        current.dispose();
         saver.current = null;
       }
     };
@@ -93,7 +99,8 @@ export default function EditorPage() {
 
   useEffect(() => {
     if (!engine) return;
-    return engine.subscribe((event) => {
+    let cancelled = false;
+    const unsubscribe = engine.subscribe((event) => {
       void (async () => {
         if (event.key !== projectKey(account.partition, projectId!)) return;
         setSyncStatus(event.status);
@@ -103,12 +110,25 @@ export default function EditorPage() {
             setLoadError('The online original was deleted. Your edits are safe.');
         }
         if (event.document) {
+          const session = useEditor.getState().session;
           if (useEditor.getState().saveState === 'saving') await saver.current?.flush();
+          if (
+            cancelled ||
+            useEditor.getState().session !== session ||
+            useEditor.getState().readOnly
+          )
+            return;
           useEditor.getState().load(event.document);
+          saver.current?.dispose();
+          saver.current = connectAutosave(account.partition, () => engine.schedule(event.key));
         }
         if (event.message) useEditor.setState({ error: event.message });
       })();
     });
+    return () => {
+      cancelled = true;
+      unsubscribe();
+    };
   }, [engine, account.partition, projectId]);
   useEffect(() => {
     if (state.selection || state.surface || state.openingPlacement) {
@@ -126,6 +146,7 @@ export default function EditorPage() {
       )
         return;
       const state = useEditor.getState();
+      if (state.readOnly) return;
       if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'z') {
         event.preventDefault();
         if (event.shiftKey) state.redo();
@@ -173,7 +194,7 @@ export default function EditorPage() {
         <Link to="/projects">Back to your rooms</Link>
       </div>
     );
-  if (!loaded || !state.document)
+  if (!loaded || !state.document || state.readOnly || state.document.projectId !== projectId)
     return (
       <div className="empty-state" role="status">
         Opening your room…
@@ -231,6 +252,10 @@ export default function EditorPage() {
           </button>
         </div>
         <div className="header-actions">
+          <button aria-label="Share room" onClick={() => setSharing(true)}>
+            <Share2 size={16} />
+            <span>Share</span>
+          </button>
           <button
             className="primary export-button"
             aria-label="Export plan"
@@ -405,6 +430,13 @@ export default function EditorPage() {
           )}
           <button onClick={state.clearError}>Dismiss</button>
         </div>
+      )}
+      {sharing && (
+        <ShareDialog
+          document={document}
+          getDocument={() => useEditor.getState().document!}
+          onClose={() => setSharing(false)}
+        />
       )}
       {exporting && <ExportDialog onClose={() => setExporting(false)} />}
       {comparing && <CompareDialog onClose={() => setComparing(false)} />}

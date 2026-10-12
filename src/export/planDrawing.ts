@@ -1,4 +1,4 @@
-import { roomPolygon, footprint, doorSector, walls } from '../domain/geometry';
+import { planItems, roomPolygon, footprint, doorSector, walls } from '../domain/geometry';
 import { floorColours } from '../domain/finishes';
 import type { Layout } from '../domain/model';
 import { formatLength } from '../domain/units';
@@ -61,9 +61,7 @@ export function drawPlan(
       context.stroke();
     }
   }
-  for (const item of [...layout.items].sort(
-    (left, right) => Number(right.nonblocking) - Number(left.nonblocking),
-  )) {
+  for (const item of planItems(layout.items)) {
     path(footprint(item));
     context.fillStyle = item.colour;
     context.fill();

@@ -7,6 +7,7 @@ export function connectAutosave(partition: string, onCommitted?: () => void) {
     disposed = false,
     paused = false,
     expectedGeneration = useEditor.getState().generation;
+  let connectedSession = useEditor.getState().session;
   const connectedProjectId = useEditor.getState().document?.projectId;
   const channel =
     typeof BroadcastChannel !== 'undefined'
@@ -17,7 +18,15 @@ export function connectAutosave(partition: string, onCommitted?: () => void) {
     clearTimeout(deadline);
     deadline = undefined;
     const state = useEditor.getState();
-    if (!state.document || state.document.projectId !== connectedProjectId || paused) return;
+    if (
+      disposed ||
+      state.readOnly ||
+      state.session !== connectedSession ||
+      !state.document ||
+      state.document.projectId !== connectedProjectId ||
+      paused
+    )
+      return;
     const snapshot = structuredClone(state.document),
       generation = state.generation;
     queue = queue.then(async () => {
@@ -25,13 +34,17 @@ export function connectAutosave(partition: string, onCommitted?: () => void) {
         if (paused) return;
         await saveSnapshot(snapshot, partition, generation, expectedGeneration);
         expectedGeneration = generation;
-        if (!disposed && useEditor.getState().generation === generation)
+        if (
+          !disposed &&
+          useEditor.getState().session === connectedSession &&
+          useEditor.getState().generation === generation
+        )
           useEditor.setState({ saveState: 'saved' });
-        channel?.postMessage({ projectId: snapshot.projectId, generation });
+        if (!disposed) channel?.postMessage({ projectId: snapshot.projectId, generation });
         onCommitted?.();
       } catch (error) {
         if (error instanceof LocalConflictError) paused = true;
-        if (!disposed)
+        if (!disposed && useEditor.getState().session === connectedSession)
           useEditor.setState({
             saveState: 'error',
             error:
@@ -44,7 +57,14 @@ export function connectAutosave(partition: string, onCommitted?: () => void) {
     await queue;
   }
   const unsubscribe = useEditor.subscribe((state, previous) => {
-    if (!state.document || state.document.projectId !== connectedProjectId) return;
+    if (
+      disposed ||
+      state.readOnly ||
+      state.session !== connectedSession ||
+      !state.document ||
+      state.document.projectId !== connectedProjectId
+    )
+      return;
     if (state.generation !== previous.generation && state.saveState === 'saved') {
       expectedGeneration = state.generation;
       paused = false;
@@ -61,11 +81,18 @@ export function connectAutosave(partition: string, onCommitted?: () => void) {
   if (channel)
     channel.onmessage = async (event) => {
       const state = useEditor.getState();
-      if (event.data.projectId !== state.document?.projectId) return;
+      if (
+        disposed ||
+        state.readOnly ||
+        state.session !== connectedSession ||
+        event.data.projectId !== state.document?.projectId
+      )
+        return;
       const other = await database.projects.get(projectKey(partition, event.data.projectId));
-      if (!other) return;
+      if (!other || disposed || useEditor.getState().session !== connectedSession) return;
       if (state.saveState === 'saved' && other.generation > state.generation) {
         state.load(other.document);
+        connectedSession = useEditor.getState().session;
         useEditor.setState({ generation: other.generation });
         expectedGeneration = other.generation;
       } else if (state.saveState === 'saving') {

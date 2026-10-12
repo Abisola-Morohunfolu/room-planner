@@ -1,6 +1,6 @@
 import { useEffect, useState, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Plus, Upload, Trash2, Copy, ArrowUpRight, Undo2 } from 'lucide-react';
+import { Plus, Upload, Trash2, Copy, ArrowUpRight, Undo2, Share2 } from 'lucide-react';
 import { Brand } from '../components/Brand';
 import { CreateProjectDialog } from '../components/CreateProjectDialog';
 import { PlanPreview } from '../components/PlanPreview';
@@ -16,11 +16,13 @@ import { useSync } from '../sync/SyncContext';
 import { useAccount } from '../auth/AccountContext';
 import { activeLayout } from '../state/editor';
 import { importPlan, downloadPlan } from '../export/planFile';
+import { ShareDialog } from '../sharing/ShareDialog';
 export default function ProjectsPage() {
   const { partition } = useAccount(),
     engine = useSync(),
     [records, setRecords] = useState<StoredProject[]>([]),
     [trash, setTrash] = useState(false),
+    [sharing, setSharing] = useState<StoredProject | 'all' | null>(null),
     [creating, setCreating] = useState(false),
     [error, setError] = useState<string | null>(null),
     file = useRef<HTMLInputElement>(null),
@@ -69,6 +71,7 @@ export default function ProjectsPage() {
       <header className="site-header">
         <Brand />
         <nav>
+          <button onClick={() => setSharing('all')}>Shared links</button>
           <button className="small-primary" onClick={() => setCreating(true)}>
             <Plus size={17} />
             New room
@@ -161,6 +164,14 @@ export default function ProjectsPage() {
                       <Copy size={17} />
                     </button>
                   )}
+                  <button
+                    className="text-button"
+                    aria-label={trash ? 'Manage shared links' : 'Share room'}
+                    onClick={() => setSharing(record)}
+                  >
+                    <Share2 size={15} />
+                    {trash ? 'Shared links' : 'Share'}
+                  </button>
                   <button className="text-button" onClick={() => downloadPlan(record.document)}>
                     Plan file
                   </button>
@@ -183,6 +194,13 @@ export default function ProjectsPage() {
           </div>
         )}
       </main>
+      {sharing && (
+        <ShareDialog
+          document={sharing === 'all' ? undefined : sharing.document}
+          allowCreate={!trash}
+          onClose={() => setSharing(null)}
+        />
+      )}
       {creating && <CreateProjectDialog onClose={() => setCreating(false)} />}
     </div>
   );

@@ -1,4 +1,4 @@
-import { roomPolygon, footprint, walls } from '../domain/geometry';
+import { planItems, roomPolygon, footprint, walls } from '../domain/geometry';
 import { floorColours } from '../domain/finishes';
 import type { Layout } from '../domain/model';
 export function PlanPreview({ layout }: { layout: Layout }) {
@@ -28,19 +28,17 @@ export function PlanPreview({ layout }: { layout: Layout }) {
           strokeWidth="70"
         />
       ))}
-      {[...layout.items]
-        .sort((left, right) => Number(right.nonblocking) - Number(left.nonblocking))
-        .map((item) => (
-          <polygon
-            key={item.id}
-            points={footprint(item)
-              .map((point) => `${point.x},${point.y}`)
-              .join(' ')}
-            fill={item.colour}
-            stroke="#857965"
-            strokeWidth="15"
-          />
-        ))}
+      {planItems(layout.items).map((item) => (
+        <polygon
+          key={item.id}
+          points={footprint(item)
+            .map((point) => `${point.x},${point.y}`)
+            .join(' ')}
+          fill={item.colour}
+          stroke="#857965"
+          strokeWidth="15"
+        />
+      ))}
     </svg>
   );
 }

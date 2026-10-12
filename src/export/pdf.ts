@@ -1,7 +1,7 @@
 import { PDFDocument, rgb, type PDFPage } from 'pdf-lib';
 import { activeLayout } from '../state/editor';
 import { budget, money, type ProjectDocument } from '../domain/model';
-import { roomPolygon, footprint, doorSector, walls } from '../domain/geometry';
+import { planItems, roomPolygon, footprint, doorSector, walls } from '../domain/geometry';
 import { floorColours } from '../domain/finishes';
 import { formatLength } from '../domain/units';
 import fontkit from '@pdf-lib/fontkit';
@@ -79,9 +79,7 @@ export async function exportPdf(
       thickness: 110 * scale,
       color: pdfColour(layout.room.wallColours[wall.id] ?? '#e6e3d8'),
     });
-  for (const item of [...layout.items].sort(
-    (left, right) => Number(right.nonblocking) - Number(left.nonblocking),
-  )) {
+  for (const item of planItems(layout.items)) {
     const colour = item.colour.match(/\w\w/g)!.map((channel) => parseInt(channel, 16) / 255);
     page.drawSvgPath(path(footprint(item)), {
       x: offsetX,

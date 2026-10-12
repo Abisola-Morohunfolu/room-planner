@@ -9,7 +9,8 @@ import {
   type Layout,
   type Opening,
 } from '../domain/model';
-import { roundMm } from '../domain/geometry';
+import { fitsOn, isDescendant, roundMm } from '../domain/geometry';
+import { moveStack, supportAtPosition } from '../domain/stacking';
 export type Panel = 'room' | 'furniture' | 'finishes' | 'list';
 interface HistoryEntry {
   before: ProjectDocument;
@@ -19,6 +20,9 @@ interface HistoryEntry {
 }
 interface EditorState {
   document: ProjectDocument | null;
+  readOnly: boolean;
+  session: number;
+  reset: () => void;
   selection: string | null;
   surface: string | null;
   openingPlacement: Opening['type'] | null;
@@ -30,7 +34,7 @@ interface EditorState {
   future: HistoryEntry[];
   error: string | null;
   saveState: 'saving' | 'saved' | 'error';
-  load: (document: ProjectDocument) => void;
+  load: (document: ProjectDocument, readOnly?: boolean) => void;
   select: (id: string | null) => void;
   selectSurface: (surface: string | null) => void;
   setOpeningPlacement: (type: Opening['type'] | null) => void;
@@ -42,6 +46,8 @@ interface EditorState {
   clearError: () => void;
   command: (label: string, edit: (document: ProjectDocument, layout: Layout) => void) => boolean;
   updateItem: (id: string, patch: Partial<FurnitureItem>) => boolean;
+  stackItem: (id: string, supportId: string | null) => boolean;
+  moveItem: (id: string, xMm: number, yMm: number) => boolean;
   removeItem: (id: string) => void;
   duplicateItem: (id: string) => void;
   undo: () => void;
@@ -52,6 +58,20 @@ interface EditorState {
 }
 export const useEditor = create<EditorState>((set, get) => ({
   document: null,
+  readOnly: false,
+  session: 0,
+  reset: () =>
+    set({
+      document: null,
+      readOnly: false,
+      session: get().session + 1,
+      selection: null,
+      surface: null,
+      placement: null,
+      openingPlacement: null,
+      history: [],
+      future: [],
+    }),
   selection: null,
   surface: null,
   openingPlacement: null,
@@ -63,9 +83,12 @@ export const useEditor = create<EditorState>((set, get) => ({
   future: [],
   error: null,
   saveState: 'saved',
-  load: (document) =>
+  load: (document, readOnly = false) =>
     set({
       document: projectSchema.parse(document),
+      readOnly,
+      session: get().session + 1,
+      view: '2d',
       selection: null,
       surface: null,
       placement: null,
@@ -80,7 +103,7 @@ export const useEditor = create<EditorState>((set, get) => ({
   selectSurface: (surface) => set({ surface, selection: null }),
   setOpeningPlacement: (openingPlacement) =>
     set(
-      openingPlacement
+      openingPlacement && !get().readOnly
         ? { openingPlacement, placement: null, selection: null, view: '2d', panel: 'room' }
         : { openingPlacement: null },
     ),
@@ -111,14 +134,14 @@ export const useEditor = create<EditorState>((set, get) => ({
   setView: (view) => set({ view, placement: null, openingPlacement: null }),
   setPlacement: (placement) =>
     set(
-      placement
+      placement && !get().readOnly
         ? { placement, openingPlacement: null, selection: null, surface: null, view: '2d' }
         : { placement: null },
     ),
   clearError: () => set({ error: null }),
   command: (label, edit) => {
     const state = get();
-    if (!state.document) return false;
+    if (state.readOnly || !state.document) return false;
     const candidate = structuredClone(state.document),
       layout = candidate.layouts.find((layout) => layout.id === candidate.activeLayoutId)!;
     try {
@@ -151,29 +174,97 @@ export const useEditor = create<EditorState>((set, get) => ({
   },
   updateItem: (id, patch) =>
     get().command('Edit furniture', (_document, layout) => {
-      layout.items = layout.items.map((item) =>
-        item.id === id ? normalizeItem({ ...item, ...patch }) : item,
-      );
+      const item = layout.items.find((piece) => piece.id === id);
+      if (!item) return;
+      const before = { ...item };
+      Object.assign(item, normalizeItem({ ...item, ...patch }));
+      const support = layout.items.find((piece) => piece.id === item.supportedById);
+      if (
+        support &&
+        (patch.xMm !== undefined || patch.yMm !== undefined) &&
+        !fitsOn(item, support)
+      ) {
+        item.supportedById = null;
+        item.elevationMm = 0;
+      }
+      moveStack(layout.items, before, item);
     }),
+  stackItem: (id, supportId) =>
+    get().command('Stack furniture', (_document, layout) => {
+      const item = layout.items.find((piece) => piece.id === id);
+      if (!item) return;
+      const before = { ...item };
+      if (supportId) {
+        const support = layout.items.find((piece) => piece.id === supportId);
+        if (
+          !support ||
+          support.id === id ||
+          support.nonblocking ||
+          item.nonblocking ||
+          isDescendant(support, id, layout.items)
+        )
+          throw new Error('Choose another solid piece to support this item.');
+        const candidate = {
+          ...item,
+          xMm: support.xMm,
+          yMm: support.yMm,
+          rotationDeg: support.rotationDeg,
+        };
+        if (!fitsOn(candidate, support))
+          throw new Error(
+            'This piece is too large for that surface. Resize it or choose a larger support.',
+          );
+        Object.assign(item, candidate);
+      }
+      item.supportedById = supportId;
+      item.elevationMm = 0;
+      moveStack(layout.items, before, item);
+    }),
+  moveItem: (id, xMm, yMm) => {
+    const layout = get().document && activeLayout(get().document!);
+    const item = layout?.items.find((piece) => piece.id === id);
+    if (!item || !layout) return false;
+    const candidate = normalizeItem({ ...item, xMm, yMm });
+    const support = supportAtPosition(candidate, layout.items);
+    return get().updateItem(id, {
+      xMm: candidate.xMm,
+      yMm: candidate.yMm,
+      supportedById: support?.id ?? null,
+      elevationMm: support || item.supportedById ? 0 : item.elevationMm,
+    });
+  },
   removeItem: (id) => {
+    if (get().readOnly) return;
     get().command('Delete element', (_document, layout) => {
+      for (const item of layout.items)
+        if (item.supportedById === id) {
+          item.supportedById = null;
+          item.elevationMm = 0;
+        }
       layout.items = layout.items.filter((item) => item.id !== id);
       layout.openings = layout.openings.filter((opening) => opening.id !== id);
     });
     set({ selection: null });
   },
   duplicateItem: (id) => {
+    if (get().readOnly) return;
     let selection: string | null = null;
     get().command('Duplicate furniture', (_document, layout) => {
       const source = layout.items.find((item) => item.id === id);
       if (source) {
         selection = uid();
-        layout.items.push({
+        const copy = {
           ...source,
           id: selection,
           xMm: source.xMm + 100,
           yMm: source.yMm + 100,
-        });
+        };
+        const support = layout.items.find((item) => item.id === copy.supportedById);
+        if (support && !fitsOn(copy, support)) {
+          copy.supportedById = null;
+          copy.elevationMm = 0;
+        }
+        layout.items.push(copy);
       }
     });
     set({ selection });
@@ -181,7 +272,7 @@ export const useEditor = create<EditorState>((set, get) => ({
   undo: () => {
     const state = get(),
       entry = state.history.at(-1);
-    if (!entry) return;
+    if (state.readOnly || !entry) return;
     const document = structuredClone(entry.before);
     document.activeLayoutId = document.layouts.some((layout) => layout.id === entry.layoutId)
       ? entry.layoutId
@@ -202,7 +293,7 @@ export const useEditor = create<EditorState>((set, get) => ({
   redo: () => {
     const state = get(),
       entry = state.future.at(-1);
-    if (!entry) return;
+    if (state.readOnly || !entry) return;
     const document = structuredClone(entry.after);
     document.activeLayoutId = document.layouts.some((layout) => layout.id === entry.layoutId)
       ? entry.layoutId
@@ -229,8 +320,7 @@ export const useEditor = create<EditorState>((set, get) => ({
       placement: null,
       surface: null,
       openingPlacement: null,
-      generation: get().generation + 1,
-      saveState: 'saving',
+      ...(get().readOnly ? {} : { generation: get().generation + 1, saveState: 'saving' as const }),
     });
   },
   duplicateLayout: () => {

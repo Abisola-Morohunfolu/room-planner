@@ -22,11 +22,26 @@ export interface StoredProject {
   uploadMappings?: Record<string, string>;
   cloudDeletedAt?: number | null;
 }
+export interface StoredShare {
+  shareId: string;
+  projectId: string;
+  projectName: string;
+  url: string;
+  createdAt: number;
+  expiresAt: number;
+  managementToken: string;
+  revokedAt: number | null;
+}
 export class PlannerDatabase extends Dexie {
   projects!: Table<StoredProject, string>;
+  shares!: Table<StoredShare, string>;
   constructor(name = 'room-planner') {
     super(name);
     this.version(1).stores({ projects: 'key,partition,[partition+deletedAt],updatedAt' });
+    this.version(2).stores({
+      projects: 'key,partition,[partition+deletedAt],updatedAt',
+      shares: 'shareId,projectId,createdAt,expiresAt',
+    });
   }
 }
 export const database = new PlannerDatabase();

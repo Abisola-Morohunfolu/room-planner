@@ -7,14 +7,16 @@ import { buildFurnitureParts, type FurniturePart } from './furnitureParts';
 import { useSurfaceTexture } from './SurfaceMaterials';
 export function FurnitureMesh({
   item,
+  items,
   selected,
   onSelect,
 }: {
   item: FurnitureItem;
+  items: FurnitureItem[];
   selected: boolean;
   onSelect: () => void;
 }) {
-  const transform = toThreeTransform(item),
+  const transform = toThreeTransform(item, items),
     parts = useMemo(() => buildFurnitureParts(item), [item]);
   return (
     <group

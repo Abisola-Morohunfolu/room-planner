@@ -22,3 +22,15 @@ export const projects = sqliteTable(
     index('projects_expiry').on(t.deletedAt),
   ],
 );
+
+export const sharedSnapshots = sqliteTable(
+  'shared_snapshots',
+  {
+    shareId: text('share_id').primaryKey(),
+    documentJson: text('document_json').notNull(),
+    createdAt: integer('created_at').notNull(),
+    expiresAt: integer('expires_at').notNull(),
+    managementTokenHash: text('management_token_hash').notNull(),
+  },
+  (t) => [index('shared_snapshots_expiry').on(t.expiresAt)],
+);

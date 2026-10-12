@@ -1,3 +1,4 @@
+import { itemElevation } from '../domain/geometry';
 import { findCatalog } from '../domain/catalog';
 import { currencyDigits, type ProjectDocument } from '../domain/model';
 import { activeLayout } from '../state/editor';
@@ -23,6 +24,8 @@ export function exportCsv(document: ProjectDocument) {
       'Owned / to-buy',
       'Price',
       'Currency',
+      'Height above floor',
+      'Placed on',
     ],
     ...layout.items.map((item) => [
       layout.name,
@@ -40,6 +43,8 @@ export function exportCsv(document: ProjectDocument) {
             currencyDigits(document.currency),
           ),
       document.currency,
+      Number((itemElevation(item, layout.items) / divisor).toFixed(3)),
+      layout.items.find((piece) => piece.id === item.supportedById)?.name ?? 'Floor',
     ]),
   ];
   return '\uFEFF' + rows.map((row) => row.map(csvCell).join(',')).join('\r\n');

@@ -1,3 +1,4 @@
+import { supportAtPosition } from '../domain/stacking';
 import { useEditor, activeLayout } from '../state/editor';
 import { newItem } from '../domain/model';
 import { findCatalog } from '../domain/catalog';
@@ -82,6 +83,7 @@ export function PlacementControls() {
     }
     if (
       state.command('Place furniture', (_document, layout) => {
+        item.supportedById = supportAtPosition(item, layout.items)?.id ?? null;
         layout.items.push(item);
       })
     ) {

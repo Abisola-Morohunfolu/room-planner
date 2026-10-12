@@ -104,6 +104,62 @@ export function buildFurnitureParts(item: FurnitureItem): FurniturePart[] {
       darkColour,
     );
     add([width / 3, panel, depth * 0.94], [0, bodyY, depth * 0.03]);
+  } else if (item.shape === 'l-shape') {
+    const side = item.catalogId.endsWith('-right') ? 1 : -1;
+    const mainDepth = depth * 0.52,
+      chaiseWidth = width * 0.36;
+    const mainZ = -depth * 0.24,
+      chaiseX = side * width * 0.32;
+    add([width, height * 0.22, mainDepth], [0, -height * 0.23, mainZ], darkColour, {
+      radius: 0.04,
+    });
+    add(
+      [chaiseWidth, height * 0.22, depth * 0.48],
+      [chaiseX, -height * 0.23, depth * 0.26],
+      darkColour,
+      { radius: 0.04 },
+    );
+    add([width * 0.92, height * 0.64, depth * 0.085], [0, height * 0.18, -depth * 0.4575], colour, {
+      radius: 0.055,
+    });
+    for (const end of [-1, 1]) {
+      const armDepth = end === side ? depth * 0.9 : mainDepth * 0.9;
+      add(
+        [width * 0.045, height * 0.54, armDepth],
+        [end * width * 0.4775, -height * 0.02, end === side ? 0 : mainZ],
+        colour,
+        { radius: 0.04 },
+      );
+    }
+    for (let index = 0; index < 3; index++) {
+      const x = (index - 1) * width * 0.3;
+      const chaise = index === (side === -1 ? 0 : 2);
+      add(
+        [width * 0.285, height * 0.15, chaise ? depth * 0.78 : depth * 0.31],
+        [x, -height * 0.045, chaise ? depth * 0.06 : -depth * 0.185],
+        lightColour,
+        { radius: 0.04 },
+      );
+      add(
+        [width * 0.285, height * 0.35, depth * 0.075],
+        [x, height * 0.21, -depth * 0.36],
+        colour,
+        { radius: 0.045 },
+      );
+    }
+    for (const x of [-width * 0.43, width * 0.43])
+      for (const z of [-depth * 0.4, -depth * 0.01])
+        add([width * 0.025, height * 0.16, depth * 0.03], [x, -height * 0.42, z], '#876f54', {
+          round: true,
+          texture: 'wood',
+        });
+    for (const x of [chaiseX - chaiseWidth * 0.35, chaiseX + chaiseWidth * 0.35])
+      add(
+        [width * 0.025, height * 0.16, depth * 0.03],
+        [x, -height * 0.42, depth * 0.43],
+        '#876f54',
+        { round: true, texture: 'wood' },
+      );
   } else if (sofa) {
     add([width, height * 0.22, depth], [0, -height * 0.23, 0], darkColour, { radius: 0.04 });
     add([width * 0.92, height * 0.64, depth * 0.16], [0, height * 0.18, -depth * 0.42], colour, {
