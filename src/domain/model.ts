@@ -65,12 +65,14 @@ export const itemSchema = z
     catalogId: z.string().min(1).max(100),
     catalogVersion: z.number().int().positive(),
     name,
-    shape: z.enum(['rectangle', 'ellipse']),
+    shape: z.enum(['rectangle', 'ellipse', 'l-shape']),
     widthMm: mm.positive().max(20000),
     depthMm: mm.positive().max(20000),
     heightMm: mm.positive().max(20000),
     xMm: mm.min(-100000).max(100000),
     yMm: mm.min(-100000).max(100000),
+    elevationMm: mm.min(0).max(20000).default(0),
+    supportedById: z.uuid().nullable().default(null),
     rotationDeg: z.number().finite().min(0).lt(360),
     colour,
     finishId: z.enum(['neutral', 'wood', 'fabric', 'glass', 'metal']),
@@ -98,7 +100,26 @@ export const layoutSchema = z
     items: z.array(itemSchema).max(200),
     clearanceTargetMm: mm.min(0).max(20000).nullable(),
   })
-  .strict();
+  .strict()
+  .superRefine((layout, context) => {
+    for (const item of layout.items) {
+      const seen = new Set([item.id]);
+      let supportId = item.supportedById;
+      while (supportId) {
+        const support = layout.items.find((piece) => piece.id === supportId);
+        if (!support || support.nonblocking || seen.has(supportId)) {
+          context.addIssue({
+            code: 'custom',
+            message: 'Choose an existing solid support without creating a stacking loop.',
+            path: ['items', layout.items.indexOf(item), 'supportedById'],
+          });
+          break;
+        }
+        seen.add(supportId);
+        supportId = support.supportedById;
+      }
+    }
+  });
 export const projectSchema = z
   .object({
     schemaVersion: z.literal(1),
@@ -202,6 +223,8 @@ export function newItem(catalogId: string, xMm: number, yMm: number): FurnitureI
     xMm: roundMm(xMm),
     yMm: roundMm(yMm),
     rotationDeg: 0,
+    elevationMm: 0,
+    supportedById: null,
     colour: catalogItem.colour,
     finishId: catalogItem.finish,
     status: 'owned',
@@ -210,11 +233,16 @@ export function newItem(catalogId: string, xMm: number, yMm: number): FurnitureI
   };
 }
 export function cloneLayout(layout: Layout, name: string): Layout {
+  const itemIds = new Map(layout.items.map((item) => [item.id, uid()]));
   return {
     ...structuredClone(layout),
     id: uid(),
     name,
-    items: layout.items.map((item) => ({ ...item, id: uid() })),
+    items: layout.items.map((item) => ({
+      ...item,
+      id: itemIds.get(item.id)!,
+      supportedById: item.supportedById ? itemIds.get(item.supportedById)! : null,
+    })),
     openings: layout.openings.map((opening) => ({ ...opening, id: uid() })),
   };
 }

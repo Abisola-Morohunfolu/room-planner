@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Search, ArrowUpRight } from 'lucide-react';
 import { catalog, customCatalog, type CatalogItem } from '../../domain/catalog';
 import { useEditor } from '../../state/editor';
+import { localFootprint } from '../../domain/geometry';
 import { formatLength } from '../../domain/units';
 export function FurnitureThumbnail({ item }: { item: CatalogItem }) {
   const scale = 62 / Math.max(item.width, item.depth);
@@ -20,6 +21,19 @@ export function FurnitureThumbnail({ item }: { item: CatalogItem }) {
             fillOpacity={item.finish === 'glass' ? 0.45 : 1}
             stroke="#716a5e"
           />
+        ) : item.shape === 'l-shape' ? (
+          <polygon
+            points={localFootprint({
+              shape: item.shape,
+              catalogId: item.id,
+              widthMm: width,
+              depthMm: depth,
+            })
+              .map((p) => `${p.x + width / 2},${p.y + depth / 2}`)
+              .join(' ')}
+            fill={item.colour}
+            stroke="#716a5e"
+          />
         ) : (
           <rect
             width={width}
@@ -32,7 +46,7 @@ export function FurnitureThumbnail({ item }: { item: CatalogItem }) {
         )}
         {item.category === 'Seating' && (
           <path
-            d={`M4 ${depth * 0.3} H${width - 4} M${width / 2} ${depth * 0.3} V${depth - 4}`}
+            d={`M4 ${depth * 0.3} H${width - 4} M${width / 2} ${depth * 0.3} V${item.shape === 'l-shape' ? depth * 0.48 : depth - 4}`}
             stroke="#ffffff"
             opacity="0.5"
           />
@@ -145,7 +159,8 @@ export function FurniturePanel() {
         ))}
       </div>
       <p className="fine-print">
-        Choose a piece, then tap the floor plan to place it. All dimensions can be edited.
+        Choose a piece, then tap the floor plan to place it. Drop it on a console or table to stack
+        it, or use Place on in its settings.
       </p>
     </>
   );

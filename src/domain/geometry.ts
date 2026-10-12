@@ -101,25 +101,129 @@ export function pointInPolygon(point: Point, polygon: Point[]): boolean {
   }
   return inside;
 }
-export function footprint(item: FurnitureItem): Point[] {
-  const radians = (item.rotationDeg * Math.PI) / 180,
-    sampleCount = item.shape === 'ellipse' ? 64 : 4;
-  const local =
-    item.shape === 'ellipse'
-      ? Array.from({ length: sampleCount }, (_, sampleIndex) => ({
-          x: (Math.cos((sampleIndex * 2 * Math.PI) / sampleCount) * item.widthMm) / 2,
-          y: (Math.sin((sampleIndex * 2 * Math.PI) / sampleCount) * item.depthMm) / 2,
-        }))
-      : [
-          { x: -item.widthMm / 2, y: -item.depthMm / 2 },
-          { x: item.widthMm / 2, y: -item.depthMm / 2 },
-          { x: item.widthMm / 2, y: item.depthMm / 2 },
-          { x: -item.widthMm / 2, y: item.depthMm / 2 },
-        ];
-  return local.map((localPoint) => ({
-    x: item.xMm + localPoint.x * Math.cos(radians) - localPoint.y * Math.sin(radians),
-    y: item.yMm + localPoint.x * Math.sin(radians) + localPoint.y * Math.cos(radians),
+/** Local plan outline; the chaise occupies 36% of the width and the back seats 52% of the depth. */
+export function localFootprint(
+  item: Pick<FurnitureItem, 'shape' | 'widthMm' | 'depthMm' | 'catalogId'>,
+): Point[] {
+  const w = item.widthMm,
+    d = item.depthMm;
+  if (item.shape === 'ellipse')
+    return Array.from({ length: 64 }, (_, i) => ({
+      x: (Math.cos((i * 2 * Math.PI) / 64) * w) / 2,
+      y: (Math.sin((i * 2 * Math.PI) / 64) * d) / 2,
+    }));
+  if (item.shape === 'l-shape') {
+    const points = [
+      { x: -w / 2, y: -d / 2 },
+      { x: w / 2, y: -d / 2 },
+      { x: w / 2, y: d * 0.02 },
+      { x: -w * 0.14, y: d * 0.02 },
+      { x: -w * 0.14, y: d / 2 },
+      { x: -w / 2, y: d / 2 },
+    ];
+    return item.catalogId.endsWith('-right')
+      ? points.map((p) => ({ x: -p.x, y: p.y })).reverse()
+      : points;
+  }
+  return [
+    { x: -w / 2, y: -d / 2 },
+    { x: w / 2, y: -d / 2 },
+    { x: w / 2, y: d / 2 },
+    { x: -w / 2, y: d / 2 },
+  ];
+}
+function transformPoints(item: FurnitureItem, points: Point[]): Point[] {
+  const radians = (item.rotationDeg * Math.PI) / 180;
+  return points.map((p) => ({
+    x: item.xMm + p.x * Math.cos(radians) - p.y * Math.sin(radians),
+    y: item.yMm + p.x * Math.sin(radians) + p.y * Math.cos(radians),
   }));
+}
+export function footprint(item: FurnitureItem): Point[] {
+  return transformPoints(item, localFootprint(item));
+}
+/** Convex pieces keep collision and clearance checks accurate in the couch's open corner. */
+export function footprintParts(item: FurnitureItem): Point[][] {
+  if (item.shape !== 'l-shape') return [footprint(item)];
+  const w = item.widthMm,
+    d = item.depthMm,
+    side = item.catalogId.endsWith('-right') ? -1 : 1;
+  return [
+    [
+      { x: -w / 2, y: -d / 2 },
+      { x: w / 2, y: -d / 2 },
+      { x: w / 2, y: d * 0.02 },
+      { x: -w / 2, y: d * 0.02 },
+    ],
+    [
+      { x: -w / 2, y: d * 0.02 },
+      { x: -w * 0.14, y: d * 0.02 },
+      { x: -w * 0.14, y: d / 2 },
+      { x: -w / 2, y: d / 2 },
+    ].map((p) => ({ x: p.x * side, y: p.y })),
+  ].map((points) => transformPoints(item, points));
+}
+export function furnitureGap(first: FurnitureItem, second: FurnitureItem): number {
+  return Math.min(
+    ...footprintParts(first).flatMap((a) =>
+      footprintParts(second).map((b) => polygonDistance(a, b)),
+    ),
+  );
+}
+export function itemElevation(item: FurnitureItem, items: FurnitureItem[] = []): number {
+  let elevation = item.elevationMm ?? 0;
+  const visited = new Set([item.id]);
+  let supportId = item.supportedById;
+  while (supportId && !visited.has(supportId)) {
+    visited.add(supportId);
+    const support = items.find((piece) => piece.id === supportId);
+    if (!support) break;
+    elevation += support.heightMm + (support.elevationMm ?? 0);
+    supportId = support.supportedById;
+  }
+  return roundMm(elevation);
+}
+export function heightsOverlap(
+  first: FurnitureItem,
+  second: FurnitureItem,
+  items: FurnitureItem[],
+): boolean {
+  const a = itemElevation(first, items),
+    b = itemElevation(second, items);
+  return Math.min(a + first.heightMm, b + second.heightMm) - Math.max(a, b) > 0.1;
+}
+export function planItems(items: FurnitureItem[]): FurnitureItem[] {
+  return [...items].sort(
+    (a, b) =>
+      Number(b.nonblocking) - Number(a.nonblocking) ||
+      itemElevation(a, items) - itemElevation(b, items),
+  );
+}
+export function isDescendant(
+  item: FurnitureItem,
+  ancestorId: string,
+  items: FurnitureItem[],
+): boolean {
+  const seen = new Set<string>();
+  let id = item.supportedById;
+  while (id && !seen.has(id)) {
+    if (id === ancestorId) return true;
+    seen.add(id);
+    id = items.find((piece) => piece.id === id)?.supportedById ?? null;
+  }
+  return false;
+}
+export function fitsOn(item: FurnitureItem, support: FurnitureItem): boolean {
+  const outline = footprint(item),
+    surface = footprint(support);
+  return (
+    outline.every((p) => pointInPolygon(p, surface)) &&
+    !outline.some((a, i) =>
+      surface.some((b, j) =>
+        segmentsCross(a, outline[(i + 1) % outline.length], b, surface[(j + 1) % surface.length]),
+      ),
+    )
+  );
 }
 const cross = (startPoint: Point, endPoint: Point, testPoint: Point) =>
   (endPoint.x - startPoint.x) * (testPoint.y - startPoint.y) -
@@ -267,19 +371,28 @@ export function warnings(layout: Layout): { itemId: string; message: string }[] 
   for (const item of layout.items) {
     if (!contained(item, layout.room))
       result.push({ itemId: item.id, message: `${item.name} extends outside the room.` });
+    if (itemElevation(item, layout.items) + item.heightMm > layout.room.ceilingHeightMm)
+      result.push({ itemId: item.id, message: `${item.name} extends above the ceiling.` });
+    const support = layout.items.find((piece) => piece.id === item.supportedById);
+    if (support && !fitsOn(item, support))
+      result.push({ itemId: item.id, message: `${item.name} extends beyond ${support.name}.` });
     if (item.nonblocking) continue;
     for (const other of layout.items)
       if (
         other.id > item.id &&
         !other.nonblocking &&
-        convexGap(footprint(item), footprint(other)) < -0.1
+        heightsOverlap(item, other, layout.items) &&
+        furnitureGap(item, other) < -0.1
       )
         result.push({ itemId: item.id, message: `${item.name} overlaps ${other.name}.` });
     for (const opening of layout.openings)
       if (
         opening.type === 'door' &&
         opening.swing === 'inward' &&
-        convexGap(footprint(item), doorSector(layout.room, opening)) < -0.1
+        itemElevation(item, layout.items) < opening.heightMm &&
+        footprintParts(item).some(
+          (part) => convexGap(part, doorSector(layout.room, opening)) < -0.1,
+        )
       )
         result.push({ itemId: item.id, message: `${item.name} obstructs a door swing.` });
   }
@@ -303,9 +416,9 @@ export function nearestGap(
   }));
   if (!item.nonblocking)
     for (const other of layout.items)
-      if (other.id !== item.id && !other.nonblocking)
+      if (other.id !== item.id && !other.nonblocking && heightsOverlap(item, other, layout.items))
         candidates.push({
-          gap: polygonDistance(itemFootprint, footprint(other)),
+          gap: furnitureGap(item, other),
           label: `${item.name} → ${other.name}`,
         });
   return candidates.sort((a, b) => a.gap - b.gap)[0] ?? null;
@@ -342,8 +455,12 @@ export function snapPosition(
     }
   return { x: roundMm(snappedPosition.x), y: roundMm(snappedPosition.y) };
 }
-export const toThreeTransform = (item: FurnitureItem) => ({
-  position: [item.xMm / 1000, item.heightMm / 2000, item.yMm / 1000] as [number, number, number],
+export const toThreeTransform = (item: FurnitureItem, items: FurnitureItem[] = []) => ({
+  position: [
+    item.xMm / 1000,
+    itemElevation(item, items) / 1000 + item.heightMm / 2000,
+    item.yMm / 1000,
+  ] as [number, number, number],
   rotation: [0, (-item.rotationDeg * Math.PI) / 180, 0] as [number, number, number],
   size: [item.widthMm / 1000, item.heightMm / 1000, item.depthMm / 1000] as [
     number,

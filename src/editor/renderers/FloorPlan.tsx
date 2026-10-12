@@ -1,9 +1,12 @@
+import { supportAtPosition } from '../../domain/stacking';
 import { useEffect, useRef, useState } from 'react';
 import { Stage, Layer, Line, Group, Rect, Ellipse, Text, Circle } from 'react-konva';
 import type Konva from 'konva';
 import { Minus, Plus, Scan, Ruler, Magnet, RotateCw, RotateCcw, Copy, Trash2 } from 'lucide-react';
 import { useEditor, activeLayout } from '../../state/editor';
 import {
+  planItems,
+  localFootprint,
   roomPolygon,
   walls,
   doorSector,
@@ -50,6 +53,14 @@ function FurnitureShape({
             stroke={selected ? '#365d49' : '#716a5e'}
             strokeWidth={1 / scale}
           />
+        ) : item.shape === 'l-shape' ? (
+          <Line
+            points={localFootprint(item).flatMap((p) => [p.x + width / 2, p.y + depth / 2])}
+            closed
+            fill={item.colour}
+            stroke={selected ? '#365d49' : '#716a5e'}
+            strokeWidth={1 / scale}
+          />
         ) : (
           <Rect
             width={width}
@@ -61,7 +72,7 @@ function FurnitureShape({
             strokeWidth={1 / scale}
           />
         )}
-        {isSofa && (
+        {isSofa && item.shape !== 'l-shape' && (
           <>
             <Rect
               x={width * 0.06}
@@ -90,6 +101,34 @@ function FurnitureShape({
               opacity={0.15}
               cornerRadius={40}
             />
+          </>
+        )}
+        {item.shape === 'l-shape' && (
+          <>
+            <Rect
+              x={width * 0.04}
+              y={depth * 0.035}
+              width={width * 0.92}
+              height={depth * 0.1}
+              fill="#ffffff"
+              opacity={0.22}
+              cornerRadius={30}
+            />
+            {[0, 1, 2].map((index) => {
+              const chaiseIndex = item.catalogId.endsWith('-right') ? 2 : 0;
+              return (
+                <Rect
+                  key={index}
+                  x={width * (0.05 + index * 0.3)}
+                  y={depth * 0.16}
+                  width={width * 0.285}
+                  height={depth * (index === chaiseIndex ? 0.78 : 0.31)}
+                  fill="#ffffff"
+                  opacity={0.15}
+                  cornerRadius={30}
+                />
+              );
+            })}
           </>
         )}
         {isBed && (
@@ -390,6 +429,7 @@ export function FloorPlan() {
       item.yMm = snapped.y;
       if (
         state.command('Place furniture', (_document, layout) => {
+          item.supportedById = supportAtPosition(item, layout.items)?.id ?? null;
           layout.items.push(item);
         })
       ) {
@@ -409,6 +449,7 @@ export function FloorPlan() {
     : null;
   const pinch = useRef<{ distance: number; centre: Point } | null>(null);
   const openContextMenu = (target: PlanMenuTarget) => {
+    if (state.readOnly) return;
     state.setPlacement(null);
     state.setOpeningPlacement(null);
     setRuler(false);
@@ -705,6 +746,7 @@ export function FloorPlan() {
                 x={0}
                 y={0}
                 draggable={
+                  !state.readOnly &&
                   !state.placement &&
                   !state.openingPlacement &&
                   !ruler &&
@@ -789,80 +831,79 @@ export function FloorPlan() {
               </Group>
             );
           })}
-          {[...layout.items]
-            .sort((left, right) => Number(right.nonblocking) - Number(left.nonblocking))
-            .map((item) => (
-              <Group
-                key={item.id}
-                id={item.id}
-                name="furniture-item"
-                x={item.xMm}
-                y={item.yMm}
-                rotation={item.rotationDeg}
-                draggable={
-                  !state.placement &&
-                  !state.openingPlacement &&
-                  !ruler &&
-                  (size.width > 600 || state.selection === item.id)
-                }
-                onClick={(event) => {
-                  event.cancelBubble = true;
-                  if (state.placement || state.openingPlacement || ruler) {
-                    place(
-                      stage.current?.getRelativePointerPosition() ?? { x: item.xMm, y: item.yMm },
-                    );
-                    return;
-                  }
-                  state.select(item.id);
-                }}
-                onTap={(event) => {
-                  event.cancelBubble = true;
-                  if (state.placement || state.openingPlacement || ruler) {
-                    place(
-                      stage.current?.getRelativePointerPosition() ?? { x: item.xMm, y: item.yMm },
-                    );
-                    return;
-                  }
-                  state.select(item.id);
-                }}
-                onDragStart={(event) => {
-                  event.cancelBubble = true;
-                  state.select(item.id);
-                  dragStart.current = { x: item.xMm, y: item.yMm };
-                  dragCancelled.current = false;
-                  event.target.name('dragging-item');
-                }}
-                onDragMove={(event) => {
-                  event.cancelBubble = true;
-                  const bypass = 'altKey' in event.evt && event.evt.altKey;
-                  const position = snapPosition(
-                    item,
-                    event.target.x(),
-                    event.target.y(),
-                    layout.room,
-                    grid && !bypass,
-                    wallSnap && !bypass,
-                    1 / camera.scale,
+          {planItems(layout.items).map((item) => (
+            <Group
+              key={item.id}
+              id={item.id}
+              name="furniture-item"
+              x={item.xMm}
+              y={item.yMm}
+              rotation={item.rotationDeg}
+              draggable={
+                !state.readOnly &&
+                !state.placement &&
+                !state.openingPlacement &&
+                !ruler &&
+                (size.width > 600 || state.selection === item.id)
+              }
+              onClick={(event) => {
+                event.cancelBubble = true;
+                if (state.placement || state.openingPlacement || ruler) {
+                  place(
+                    stage.current?.getRelativePointerPosition() ?? { x: item.xMm, y: item.yMm },
                   );
-                  event.target.position(position);
-                }}
-                onDragEnd={(event) => {
-                  event.cancelBubble = true;
-                  event.target.name('furniture-item');
-                  if (!dragCancelled.current)
-                    state.updateItem(item.id, { xMm: event.target.x(), yMm: event.target.y() });
-                  else event.target.position({ x: item.xMm, y: item.yMm });
-                }}
-              >
-                <FurnitureShape
-                  item={item}
-                  selected={state.selection === item.id}
-                  scale={camera.scale}
-                  units={document.displayUnits}
-                />
-              </Group>
-            ))}
-          {selectedItem && !state.placement && !ruler && (
+                  return;
+                }
+                state.select(item.id);
+              }}
+              onTap={(event) => {
+                event.cancelBubble = true;
+                if (state.placement || state.openingPlacement || ruler) {
+                  place(
+                    stage.current?.getRelativePointerPosition() ?? { x: item.xMm, y: item.yMm },
+                  );
+                  return;
+                }
+                state.select(item.id);
+              }}
+              onDragStart={(event) => {
+                event.cancelBubble = true;
+                state.select(item.id);
+                dragStart.current = { x: item.xMm, y: item.yMm };
+                dragCancelled.current = false;
+                event.target.name('dragging-item');
+              }}
+              onDragMove={(event) => {
+                event.cancelBubble = true;
+                const bypass = 'altKey' in event.evt && event.evt.altKey;
+                const position = snapPosition(
+                  item,
+                  event.target.x(),
+                  event.target.y(),
+                  layout.room,
+                  grid && !bypass,
+                  wallSnap && !bypass,
+                  1 / camera.scale,
+                );
+                event.target.position(position);
+              }}
+              onDragEnd={(event) => {
+                event.cancelBubble = true;
+                event.target.name('furniture-item');
+                if (!dragCancelled.current)
+                  state.moveItem(item.id, event.target.x(), event.target.y());
+                else event.target.position({ x: item.xMm, y: item.yMm });
+              }}
+            >
+              <FurnitureShape
+                item={item}
+                selected={state.selection === item.id}
+                scale={camera.scale}
+                units={document.displayUnits}
+              />
+            </Group>
+          ))}
+          {!state.readOnly && selectedItem && !state.placement && !ruler && (
             <RotationHandle item={selectedItem} scale={camera.scale} stage={stage} />
           )}
           {previewItem && (
@@ -899,7 +940,7 @@ export function FloorPlan() {
           )}
         </Layer>
       </Stage>
-      {contextMenu && (
+      {!state.readOnly && contextMenu && (
         <PlanContextMenu
           key={`${contextMenu.screen.x}-${contextMenu.screen.y}`}
           target={contextMenu}
@@ -946,6 +987,7 @@ export function FloorPlan() {
             item.yMm = point.y;
             if (
               state.command('Place furniture', (_document, layout) => {
+                item.supportedById = supportAtPosition(item, layout.items)?.id ?? null;
                 layout.items.push(item);
               })
             )
@@ -953,7 +995,7 @@ export function FloorPlan() {
           }}
         />
       )}
-      {selectedItem && !state.placement && !ruler && (
+      {!state.readOnly && selectedItem && !state.placement && !ruler && (
         <div className="selection-toolbar" aria-label="Selected furniture actions">
           <strong>{selectedItem.name}</strong>
           <span>{Math.round(selectedItem.rotationDeg)}°</span>
@@ -1004,7 +1046,11 @@ export function FloorPlan() {
         !state.placement &&
         !state.openingPlacement &&
         !ruler && (
-          <p className="plan-instruction">Tap a part to edit. Right-click for quick actions.</p>
+          <p className="plan-instruction">
+            {state.readOnly
+              ? 'Tap a piece to inspect. Drag the plan to pan.'
+              : 'Tap a part to edit. Right-click for quick actions.'}
+          </p>
         )}
       <div className="canvas-tools">
         <button title="Zoom out" aria-label="Zoom out" onClick={() => zoom(0.8)}>
@@ -1031,22 +1077,26 @@ export function FloorPlan() {
         >
           <Ruler size={18} />
         </button>
-        <button
-          title="Snap furniture to 100 mm grid"
-          aria-label="Grid snapping"
-          aria-pressed={grid}
-          onClick={() => setGrid(!grid)}
-        >
-          Grid
-        </button>
-        <button
-          title="Snap furniture to nearby walls"
-          aria-label="Wall snapping"
-          aria-pressed={wallSnap}
-          onClick={() => setWallSnap(!wallSnap)}
-        >
-          <Magnet size={18} />
-        </button>
+        {!state.readOnly && (
+          <>
+            <button
+              title="Snap furniture to 100 mm grid"
+              aria-label="Grid snapping"
+              aria-pressed={grid}
+              onClick={() => setGrid(!grid)}
+            >
+              Grid
+            </button>
+            <button
+              title="Snap furniture to nearby walls"
+              aria-label="Wall snapping"
+              aria-pressed={wallSnap}
+              onClick={() => setWallSnap(!wallSnap)}
+            >
+              <Magnet size={18} />
+            </button>
+          </>
+        )}
       </div>
       {(state.placement || state.openingPlacement || ruler) && (
         <div className="placement-hint">

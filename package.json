@@ -76,6 +76,7 @@
     "check:cloud": "pnpm check && pnpm test:worker",
     "lint": "eslint .",
     "format": "prettier --write .",
-    "format:check": "prettier --check ."
+    "format:check": "prettier --check .",
+    "test:sharing": "playwright test --config playwright.sharing.config.ts"
   }
 }

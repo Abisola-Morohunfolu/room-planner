@@ -18,7 +18,7 @@ export interface CatalogItem {
   width: number;
   depth: number;
   height: number;
-  shape: 'rectangle' | 'ellipse';
+  shape: 'rectangle' | 'ellipse' | 'l-shape';
   colour: string;
   model: string;
   finish: FurnitureFinish;
@@ -77,6 +77,8 @@ const entries: [string, string, Category, number, number, number, string?, strin
   ['glass-side-table', 'Glass side table', 'Tables', 450, 450, 500],
   ['glass-dining-rect', 'Glass dining table', 'Tables', 1600, 900, 750],
   ['glass-dining-round', 'Round glass dining table', 'Tables', 1100, 1100, 750, 'ellipse'],
+  ['sofa-l-left', 'L-shaped couch · left chaise', 'Seating', 2800, 1700, 820, 'l-shape'],
+  ['sofa-l-right', 'L-shaped couch · right chaise', 'Seating', 2800, 1700, 820, 'l-shape'],
 ];
 export const catalog: CatalogItem[] = entries.map(
   ([catalogId, name, category, width, depth, height, shape]) => ({
@@ -87,7 +89,7 @@ export const catalog: CatalogItem[] = entries.map(
     width,
     depth,
     height,
-    shape: shape === 'ellipse' ? 'ellipse' : 'rectangle',
+    shape: shape === 'ellipse' ? 'ellipse' : shape === 'l-shape' ? 'l-shape' : 'rectangle',
     colour: catalogId.startsWith('glass-')
       ? '#bad9d5'
       : category === 'Appliances'

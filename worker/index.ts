@@ -1,3 +1,6 @@
+import { ApiError, boundedBody } from './api';
+import { shares } from './shares';
+import { snapshotStorage } from './snapshot-storage';
 import { emailConfigured } from './email';
 import { Hono } from 'hono';
 import { z } from 'zod';
@@ -19,15 +22,6 @@ interface ProjectRow {
 }
 type Bindings = { Bindings: Env; Variables: { ownerId: string; requestId: string } };
 const app = new Hono<Bindings>();
-class ApiError extends Error {
-  constructor(
-    public status: 400 | 401 | 403 | 404 | 409 | 410 | 413 | 422 | 429 | 503,
-    public code: string,
-    message: string,
-  ) {
-    super(message);
-  }
-}
 const mutationSchema = z
   .object({ baseRevision: z.number().int().positive(), mutationId: z.uuid() })
   .strict();
@@ -53,40 +47,30 @@ async function hash(value: unknown) {
     .map((byte) => byte.toString(16).padStart(2, '0'))
     .join('');
 }
-async function boundedBody(request: Request): Promise<unknown> {
-  if (Number(request.headers.get('content-length')) > 1100000)
-    throw new ApiError(413, 'oversized_body', 'Plan is too large.');
-  const reader = request.body?.getReader();
-  if (!reader) throw new ApiError(422, 'invalid_document', 'A JSON body is required.');
-  let size = 0;
-  const chunks: Uint8Array[] = [];
-  for (;;) {
-    const { value, done } = await reader.read();
-    if (done) break;
-    size += value.byteLength;
-    if (size > 1100000) {
-      await reader.cancel();
-      throw new ApiError(413, 'oversized_body', 'Plan is too large.');
-    }
-    chunks.push(value);
-  }
-  const bytes = new Uint8Array(size);
-  let offset = 0;
-  for (const chunk of chunks) {
-    bytes.set(chunk, offset);
-    offset += chunk.length;
-  }
-  try {
-    return JSON.parse(new TextDecoder().decode(bytes));
-  } catch {
-    throw new ApiError(422, 'invalid_document', 'Invalid JSON.');
-  }
-}
 app.use('/api/*', async (context, next) => {
   context.set('requestId', crypto.randomUUID());
   context.header('Cache-Control', 'no-store');
   context.header('X-Content-Type-Options', 'nosniff');
   await next();
+});
+app.route('/api/shares', shares);
+app.use('/api/*', async (context, next) => {
+  if (
+    (context.req.path.startsWith('/api/auth/') ||
+      context.req.path.startsWith('/api/projects') ||
+      context.req.path === '/api/config') &&
+    context.env.ENABLE_CLOUD !== 'true'
+  )
+    throw new ApiError(404, 'not_found', 'Endpoint not found.');
+  await next();
+});
+app.get('/share/*', async (context) => {
+  const response = await context.env.ASSETS.fetch(context.req.raw);
+  const headers = new Headers(response.headers);
+  headers.set('X-Robots-Tag', 'noindex, nofollow');
+  headers.set('Referrer-Policy', 'no-referrer');
+  headers.set('Cache-Control', 'no-store');
+  return new Response(response.body, { status: response.status, headers });
 });
 app.get('/api/health', (context) => context.json({ ok: true }));
 app.get('/api/config', (context) =>
@@ -326,6 +310,9 @@ app.onError((error, context) => {
 export default {
   fetch: app.fetch,
   async scheduled(_event, env) {
+    const removed = await snapshotStorage(env.DB).cleanExpired(Date.now());
+    console.log(JSON.stringify({ event: 'share_cleanup', removed }));
+    if (env.ENABLE_CLOUD !== 'true') return;
     await env.DB.prepare(
       'DELETE FROM projects WHERE id IN (SELECT id FROM projects WHERE deleted_at <= ? ORDER BY deleted_at LIMIT 100)',
     )

@@ -53,6 +53,7 @@ export default function Scene3D() {
               <FurnitureMesh
                 key={item.id}
                 item={item}
+                items={layout.items}
                 selected={selection === item.id}
                 onSelect={() => select(item.id)}
               />

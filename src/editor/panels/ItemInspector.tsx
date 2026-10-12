@@ -3,7 +3,7 @@ import { useState } from 'react';
 import { Dialog } from '../../components/Dialog';
 import { useEditor, activeLayout } from '../../state/editor';
 import { currencyDigits, money } from '../../domain/model';
-import { nearestGap } from '../../domain/geometry';
+import { nearestGap, fitsOn, isDescendant, itemElevation } from '../../domain/geometry';
 import { formatLength } from '../../domain/units';
 import { NumberField, TextField } from '../../components/Field';
 export function ItemInspector() {
@@ -16,6 +16,15 @@ export function ItemInspector() {
     item = layout.items.find((item) => item.id === state.selection);
   if (!item) return null;
   const gap = nearestGap(item, layout);
+  const supports = layout.items.filter(
+    (piece) =>
+      piece.id !== item.id &&
+      !piece.nonblocking &&
+      !isDescendant(piece, item.id, layout.items) &&
+      (piece.id === item.supportedById ||
+        fitsOn({ ...item, xMm: piece.xMm, yMm: piece.yMm, rotationDeg: piece.rotationDeg }, piece)),
+  );
+  const support = layout.items.find((piece) => piece.id === item.supportedById);
   return (
     <section className="item-inspector">
       <div className="inspector-heading">
@@ -26,6 +35,39 @@ export function ItemInspector() {
           Done
         </button>
       </div>
+      {!item.nonblocking && (
+        <>
+          <label className="field">
+            <span>Place on</span>
+            <select
+              value={item.supportedById ?? ''}
+              onChange={(event) => state.stackItem(item.id, event.target.value || null)}
+            >
+              <option value="">Floor</option>
+              {supports.map((piece) => (
+                <option key={piece.id} value={piece.id}>
+                  {piece.name}
+                </option>
+              ))}
+            </select>
+          </label>
+          <p className="fine-print">
+            {support
+              ? `On ${support.name} · ${formatLength(itemElevation(item, layout.items), document.displayUnits)} above floor. Moves with its support.`
+              : 'Choose a surface to centre this piece on it. Only surfaces large enough are shown.'}
+          </p>
+          {!support && (
+            <NumberField
+              label="Height above floor"
+              value={item.elevationMm}
+              units={document.displayUnits}
+              min={0}
+              max={20000}
+              onCommit={(elevationMm) => state.updateItem(item.id, { elevationMm })}
+            />
+          )}
+        </>
+      )}
       <div className="rotation-controls">
         <span>Turn your piece</span>
         <div className="button-row">

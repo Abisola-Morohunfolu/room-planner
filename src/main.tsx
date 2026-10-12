@@ -6,6 +6,7 @@ import '@fontsource/libre-caslon-display/latin-400.css';
 import './styles.css';
 const LandingPage = lazy(() => import('./pages/LandingPage'));
 const ProjectsPage = lazy(() => import('./pages/ProjectsPage'));
+const SharedPage = lazy(() => import('./pages/SharedPage'));
 const EditorPage = lazy(() => import('./pages/EditorPage'));
 createRoot(document.getElementById('root')!).render(
   <BrowserRouter>
@@ -19,6 +20,7 @@ createRoot(document.getElementById('root')!).render(
       <Routes>
         <Route path="/" element={<LandingPage />} />
         <Route path="/projects" element={<ProjectsPage />} />
+        <Route path="/share/:shareId" element={<SharedPage />} />
         <Route path="/plan/:projectId" element={<EditorPage />} />
         <Route path="/sign-in" element={<Navigate to="/projects" replace />} />
         <Route
